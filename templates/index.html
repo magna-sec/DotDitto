@@ -1,0 +1,1916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DotDitto · NTDS Analyzer</title>
+  <style>
+    /* ── Reset & variables ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --surface2:    #21262d;
+      --surface3:    #2d333b;
+      --border:      #30363d;
+      --border2:     #444c56;
+      --text:        #e6edf3;
+      --text-muted:  #8b949e;
+      --green:       #3fb950;
+      --green-dim:   rgba(63,185,80,.15);
+      --red:         #f85149;
+      --red-dim:     rgba(248,81,73,.15);
+      --yellow:      #e3b341;
+      --yellow-dim:  rgba(227,179,65,.15);
+      --blue:        #58a6ff;
+      --blue-dim:    rgba(88,166,255,.12);
+      --purple:      #d2a8ff;
+      --purple-dim:  rgba(210,168,255,.12);
+      --font-mono:   'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    }
+
+    html { font-size: 14px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    input, select, textarea, button { font-family: inherit; font-size: 13px; }
+
+    /* ── Toasts ─────────────────────────────────────────────────────── */
+    #toasts {
+      position: fixed; top: 16px; right: 16px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px; border-radius: 6px; font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.4); pointer-events: all;
+      border-left: 3px solid;
+      animation: slideIn .2s ease;
+      max-width: 360px;
+    }
+    .toast.success { background: var(--surface2); border-color: var(--green); color: var(--green); }
+    .toast.error   { background: var(--surface2); border-color: var(--red);   color: var(--red);   }
+    .toast.info    { background: var(--surface2); border-color: var(--blue);  color: var(--blue);  }
+    @keyframes slideIn { from { transform: translateX(20px); opacity:0; } to { transform: none; opacity:1; } }
+
+    /* ── Modal overlay ───────────────────────────────────────────────── */
+    #modal-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center;
+    }
+    #modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 24px; width: 600px; max-width: 95vw;
+    }
+    .modal h3 { font-size: 15px; margin-bottom: 14px; }
+    .modal textarea {
+      width: 100%; height: 220px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 10px; font-family: var(--font-mono);
+      font-size: 12px; resize: vertical;
+    }
+    .modal textarea:focus { outline: none; border-color: var(--blue); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+    /* ── Buttons ─────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border2);
+      background: var(--surface2); color: var(--text);
+      cursor: pointer; transition: border-color .15s, background .15s;
+      white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--blue); color: var(--blue); }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #0d1117; font-weight: 600; }
+    .btn.primary:hover { background: #79b8ff; border-color: #79b8ff; color: #0d1117; }
+    .btn.danger { border-color: var(--red); color: var(--red); }
+    .btn.danger:hover { background: var(--red-dim); }
+    .btn.sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Header ──────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 24px; display: flex; align-items: center; gap: 16px;
+      height: 56px; position: sticky; top: 0; z-index: 100;
+    }
+    .header-brand {
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    }
+    .brand-logo {
+      display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--blue-dim) 0%, var(--purple-dim) 100%);
+      border: 1px solid rgba(88,166,255,.3);
+      font-size: 16px; font-weight: 900; color: var(--blue);
+      letter-spacing: -2px; font-family: var(--font-mono);
+    }
+    .brand-text h1 {
+      font-size: 15px; font-weight: 700; color: var(--blue); letter-spacing: .5px; line-height: 1.1;
+    }
+    .brand-text .subtitle {
+      font-size: 10px; color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase;
+    }
+    .header-badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+    }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    #session-indicator {
+      font-size: 12px; color: var(--text-muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border2); flex-shrink: 0; }
+    .dot.on { background: var(--green); }
+
+    /* ── Main layout ─────────────────────────────────────────────────── */
+    main { max-width: 1480px; margin: 0 auto; padding: 24px; }
+
+    /* ── Upload section ──────────────────────────────────────────────── */
+    .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .upload-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px;
+    }
+    .upload-card-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    }
+    .upload-card-header h3 { font-size: 13px; font-weight: 600; }
+    .upload-card-header .dot { margin-right: 2px; }
+    .source-tag {
+      margin-left: auto; font-size: 11px; color: var(--text-muted);
+      background: var(--surface2); padding: 2px 8px; border-radius: 4px;
+    }
+    .drop-zone {
+      border: 2px dashed var(--border2); border-radius: 6px; padding: 20px;
+      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+      background: var(--bg);
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); background: var(--blue-dim); }
+    .drop-zone.loaded { border-color: var(--green); border-style: solid; }
+    .drop-zone.error-border { border-color: var(--red); }
+    .drop-zone p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+    .drop-zone .loaded-text { color: var(--green); font-weight: 500; font-size: 13px; }
+    .drop-zone .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    input[type="file"] { display: none; }
+    .upload-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    /* ── Stats strip ─────────────────────────────────────────────────── */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 12px; margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 18px;
+    }
+    .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; line-height: 1; }
+    .stat-card.blue   .value { color: var(--blue); }
+    .stat-card.green  .value { color: var(--green); }
+    .stat-card.red    .value { color: var(--red); }
+    .stat-card.yellow .value { color: var(--yellow); }
+
+    /* ── Top passwords chart ─────────────────────────────────────────── */
+    .top-pw-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px; margin-bottom: 20px;
+    }
+    .top-pw-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+    .pw-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+    .pw-bar-fill {
+      height: 20px; border-radius: 3px; background: var(--blue-dim);
+      border-left: 3px solid var(--blue); min-width: 4px; flex-shrink: 0;
+      transition: width .4s;
+    }
+    .pw-bar-label { font-family: var(--font-mono); font-size: 12px; color: var(--green); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+    .pw-bar-count { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+    /* ── Generic bar rows (for word/prefix lists) ────────────────────── */
+    .word-bar-fill {
+      height: 18px; border-radius: 3px; background: var(--purple-dim);
+      border-left: 3px solid var(--purple); min-width: 4px; flex-shrink: 0;
+    }
+    .prefix-bar-fill {
+      height: 18px; border-radius: 3px; background: var(--yellow-dim);
+      border-left: 3px solid var(--yellow); min-width: 4px; flex-shrink: 0;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────────────────── */
+    .toolbar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1 1 220px; max-width: 340px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 7px 12px;
+    }
+    .search-input:focus { outline: none; border-color: var(--blue); }
+    .toolbar select {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 6px; color: var(--text); padding: 6px 10px; cursor: pointer;
+    }
+    .toolbar select:focus { outline: none; border-color: var(--blue); }
+    .toggle-label {
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; user-select: none; color: var(--text-muted); font-size: 13px;
+      white-space: nowrap;
+    }
+    .toggle-label input { cursor: pointer; width: 14px; height: 14px; accent-color: var(--blue); }
+    .toolbar-sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+    .toolbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+    /* ── Table ───────────────────────────────────────────────────────── */
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--surface2); }
+    th {
+      padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+      cursor: pointer; user-select: none;
+    }
+    th:hover { color: var(--text); }
+    th .sort-arrow { margin-left: 4px; opacity: .5; }
+    td {
+      padding: 9px 14px; border-bottom: 1px solid rgba(48,54,61,.6);
+      font-size: 13px; vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(255,255,255,.02); }
+
+    /* Row types */
+    .row-machine td { opacity: .55; }
+
+    /* ── Rows that have history — clickable ─────────────────────────── */
+    tr.row-has-history { cursor: pointer; }
+    tr.row-has-history:hover > td { background: rgba(88,166,255,.08) !important; }
+
+    /* Summary badge on the parent row */
+    .hist-summary {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; padding: 1px 8px; border-radius: 4px;
+      background: var(--blue-dim); color: var(--blue); white-space: nowrap;
+    }
+    .hist-summary.has-cracked { background: var(--green-dim); color: var(--green); }
+
+    /* Badge when current password is unknown but history was cracked */
+    .badge-hist-warn {
+      display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 4px;
+      background: var(--yellow-dim); color: var(--yellow);
+      border: 1px solid rgba(227,179,65,.35); margin-left: 6px;
+      vertical-align: middle; white-space: nowrap;
+    }
+
+    /* ── History detail modal ────────────────────────────────────────── */
+    #hist-modal-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,.7);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #hist-modal-overlay.hidden { display: none; }
+
+    .hist-modal {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 10px; width: 580px; max-width: 96vw; max-height: 84vh;
+      overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 16px 48px rgba(0,0,0,.6);
+    }
+    .hist-modal-hdr {
+      padding: 18px 20px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between;
+      flex-shrink: 0; gap: 12px;
+    }
+    .hist-modal-title {
+      font-family: var(--font-mono); font-size: 15px; font-weight: 700;
+      color: var(--blue); word-break: break-all;
+    }
+    .hist-modal-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .hist-modal-close {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 20px; line-height: 1; flex-shrink: 0; padding: 0;
+    }
+    .hist-modal-close:hover { color: var(--text); }
+    .hist-modal-body { overflow-y: auto; padding: 22px; flex: 1; }
+
+    /* Timeline */
+    .hist-timeline { position: relative; padding-left: 28px; }
+    .hist-timeline::before {
+      content: ''; position: absolute;
+      left: 9px; top: 18px; bottom: 18px;
+      width: 2px; background: var(--border2);
+    }
+    .hist-entry { position: relative; margin-bottom: 18px; }
+    .hist-entry:last-child { margin-bottom: 0; }
+
+    .hist-dot {
+      position: absolute; left: -23px; top: 10px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--surface3); border: 2px solid var(--border2); z-index: 1;
+    }
+    .hist-dot.is-current { background: var(--blue);  border-color: var(--blue);  width: 12px; height: 12px; left: -24px; top: 9px; }
+    .hist-dot.is-cracked { background: var(--green); border-color: var(--green); }
+
+    .hist-entry-hdr {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--text-muted);
+      margin-bottom: 7px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .heh-tag  { font-family: var(--font-mono); font-size: 12px; color: var(--blue); text-transform: none; letter-spacing: 0; }
+    .heh-age  { font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .heh-reused {
+      font-size: 10px; color: var(--yellow); background: var(--yellow-dim);
+      border: 1px solid rgba(227,179,65,.3); padding: 1px 7px; border-radius: 4px;
+      text-transform: none; letter-spacing: 0; font-weight: 500;
+    }
+
+    .hist-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 11px 14px;
+    }
+    .hist-card.is-cracked { border-color: rgba(63,185,80,.35);  background: rgba(63,185,80,.06); }
+    .hist-card.is-current { border-color: rgba(88,166,255,.3);  background: rgba(88,166,255,.05); }
+
+    .hf { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+    .hf:last-child { margin-bottom: 0; }
+    .hf-lbl { color: var(--text-muted); width: 64px; flex-shrink: 0; font-size: 11px; }
+    .hf-val {
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
+    }
+    .hf-val.cracked { color: var(--green); font-weight: 700; font-size: 13px; }
+    .hf-val.unknown { color: var(--red); font-style: italic; }
+    .hf-copy {
+      background: var(--surface3); border: 1px solid var(--border2);
+      color: var(--text-muted); padding: 2px 9px; border-radius: 3px;
+      cursor: pointer; font-size: 11px; flex-shrink: 0; white-space: nowrap;
+    }
+    .hf-copy:hover { color: var(--text); border-color: var(--blue); }
+
+    /* ── Analysis section ────────────────────────────────────────────── */
+    .analysis-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px; margin-bottom: 20px;
+    }
+    .analysis-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .analysis-hdr h3 { font-size: 13px; font-weight: 600; }
+    .analysis-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+    /* Complexity cards */
+    .complexity-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;
+    }
+    .complexity-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 12px 14px;
+    }
+    .complexity-card .cc-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .05em; }
+    .complexity-card .cc-value { font-size: 22px; font-weight: 700; }
+    .complexity-card .cc-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .complexity-card.c1 .cc-value { color: var(--red); }
+    .complexity-card.c2 .cc-value { color: var(--yellow); }
+    .complexity-card.c3 .cc-value { color: var(--blue); }
+    .complexity-card.c4 .cc-value { color: var(--green); }
+
+    /* Length metrics row */
+    .len-metrics {
+      display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px;
+    }
+    .len-metric { text-align: center; }
+    .len-metric .lm-val { font-size: 20px; font-weight: 700; color: var(--blue); }
+    .len-metric .lm-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+
+    /* Char-class pills */
+    .cc-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .cc-pill {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; padding: 3px 10px; border-radius: 20px;
+      border: 1px solid var(--border2); background: var(--surface2);
+    }
+    .cc-pill .cc-pct { font-weight: 700; }
+    .cc-pill.upper   .cc-pct { color: var(--blue); }
+    .cc-pill.lower   .cc-pct { color: var(--text); }
+    .cc-pill.digit   .cc-pct { color: var(--yellow); }
+    .cc-pill.special .cc-pct { color: var(--purple); }
+
+    /* Length distribution */
+    .len-section-lbl {
+      font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: .06em; margin-bottom: 8px;
+    }
+    .length-chart {
+      display: flex; align-items: flex-end; gap: 4px;
+      height: 52px; margin-bottom: 18px; padding-bottom: 2px;
+    }
+    .len-col { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 18px; flex: 0 0 auto; }
+    .len-bar {
+      width: 100%; min-height: 3px; border-radius: 2px 2px 0 0;
+      background: rgba(88,166,255,.35); border-top: 2px solid var(--blue);
+    }
+    .len-lbl { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+
+    /* Top words / prefixes */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .mini-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 14px;
+    }
+    .mini-card h4 { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .mini-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .mini-bar-label { font-family: var(--font-mono); font-size: 12px; min-width: 80px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-bar-count { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+    /* Masks table */
+    .masks-wrap { overflow-x: auto; }
+    .masks-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 620px; }
+    .masks-table th {
+      padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .masks-table td { padding: 7px 10px; border-bottom: 1px solid rgba(48,54,61,.45); vertical-align: middle; }
+    .masks-table tr:last-child td { border-bottom: none; }
+    .masks-table tr:hover td { background: rgba(255,255,255,.02); }
+    .mask-str {
+      font-family: var(--font-mono); font-size: 11px; color: var(--blue);
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 2px 7px; border-radius: 3px; white-space: nowrap; display: inline-block;
+    }
+    .pattern-str { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+    .mask-count-bar { display: flex; align-items: center; gap: 7px; }
+    .mask-count-fill {
+      height: 6px; border-radius: 3px; min-width: 3px;
+      background: rgba(88,166,255,.3); border-left: 2px solid var(--blue);
+    }
+    .mask-example { color: var(--green); font-family: var(--font-mono); font-size: 12px; }
+
+    /* Cell content */
+    .mono { font-family: var(--font-mono); }
+    .hash-text { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: .03em; }
+    .pw-cracked { color: var(--green); font-weight: 600; }
+    .pw-shared  { font-size: 10px; color: var(--yellow); background: var(--yellow-dim); padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+    .pw-none    { color: var(--red); font-size: 12px; }
+
+    .badge {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      font-size: 11px; font-weight: 500; line-height: 1.6;
+    }
+    .badge-machine { background: var(--surface3); color: var(--text-muted); border: 1px solid var(--border2); }
+
+    .copy-btn {
+      background: none; border: 1px solid transparent;
+      color: var(--text-muted); padding: 1px 6px; border-radius: 3px;
+      cursor: pointer; font-size: 11px; opacity: 0; transition: opacity .15s;
+    }
+    td:hover .copy-btn, tr:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+
+    /* ── Pagination ──────────────────────────────────────────────────── */
+    .pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-muted);
+    }
+    .page-btns { display: flex; gap: 6px; }
+
+    /* ── Empty state ─────────────────────────────────────────────────── */
+    #empty-state {
+      text-align: center; padding: 80px 24px;
+      border: 1px dashed var(--border); border-radius: 8px;
+      background: var(--surface);
+    }
+    #empty-state .empty-logo { font-size: 36px; color: var(--blue); margin-bottom: 12px; font-family: var(--font-mono); font-weight: 900; letter-spacing: -3px; }
+    #empty-state h2 { font-size: 17px; color: var(--text-muted); margin-bottom: 8px; }
+    #empty-state p  { font-size: 13px; color: var(--text-muted); }
+
+    /* ── Misc helpers ────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; }
+
+    /* ── Tab bar ─────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex; margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 9px 22px; background: none; border: none;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .tab-panel.hidden { display: none !important; }
+
+    /* ── Hash cells (All Hashes tab) ────────────────────────────────── */
+    .hash-cell { display: flex; align-items: center; gap: 5px; }
+    .hash-truncated {
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;
+    }
+    .hash-none { color: var(--border2); font-size: 13px; }
+    .hash-copy-btn {
+      background: none; border: 1px solid transparent;
+      color: var(--text-muted); padding: 1px 6px; border-radius: 3px;
+      cursor: pointer; font-size: 11px; opacity: 0; transition: opacity .15s;
+      flex-shrink: 0;
+    }
+    tr:hover .hash-copy-btn { opacity: 1; }
+    .hash-copy-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+  </style>
+</head>
+<body>
+
+<!-- ─── Toast container ──────────────────────────────────────────────────── -->
+<div id="toasts"></div>
+
+<!-- ─── Paste modal ──────────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="hidden" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="modal-title">Paste text</h3>
+    <textarea id="modal-textarea" spellcheck="false" placeholder=""></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" onclick="submitModal()">Load</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── History detail modal ─────────────────────────────────────────────── -->
+<div id="hist-modal-overlay" class="hidden" onclick="closeHistoryModal(event)">
+  <div class="hist-modal" onclick="event.stopPropagation()">
+    <div class="hist-modal-hdr">
+      <div>
+        <div class="hist-modal-title" id="hist-modal-title"></div>
+        <div class="hist-modal-sub"  id="hist-modal-sub"></div>
+      </div>
+      <button class="hist-modal-close" onclick="closeHistoryModal()" title="Close">✕</button>
+    </div>
+    <div class="hist-modal-body" id="hist-modal-body"></div>
+  </div>
+</div>
+
+<!-- ─── Header ───────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-brand">
+    <div class="brand-logo">··</div>
+    <div class="brand-text">
+      <h1>DotDitto</h1>
+      <div class="subtitle">NTDS Analyzer</div>
+    </div>
+  </div>
+
+  <span class="header-badge">local · offline</span>
+
+  <div id="session-indicator">
+    <span class="dot" id="dot-dump"></span><span id="lbl-dump">No dump loaded</span>
+    &nbsp;·&nbsp;
+    <span class="dot" id="dot-pot"></span><span id="lbl-pot">No pot loaded</span>
+  </div>
+
+  <div class="header-actions">
+    <label class="btn sm" style="cursor:pointer">
+      Import JSON
+      <input type="file" id="import-json-input" accept=".json">
+    </label>
+    <button class="btn sm" id="btn-export-json" onclick="exportJSON()" disabled>Export JSON</button>
+    <button class="btn sm danger" id="btn-clear" onclick="clearAll()" disabled>Clear All</button>
+  </div>
+</header>
+
+<!-- ─── Main ─────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Upload section -->
+  <div class="upload-grid" id="upload-section">
+
+    <!-- secretsdump card -->
+    <div class="upload-card">
+      <div class="upload-card-header">
+        <span class="dot" id="dot-dump2"></span>
+        <h3>secretsdump Output</h3>
+        <span class="source-tag hidden" id="dump-source-tag"></span>
+      </div>
+      <div class="drop-zone" id="dump-drop-zone"
+           onclick="document.getElementById('dump-file-input').click()"
+           ondragover="onDragOver(event,'dump-drop-zone')"
+           ondragleave="onDragLeave('dump-drop-zone')"
+           ondrop="onDropDump(event)">
+        <p id="dump-drop-text">Drop file here or click to browse</p>
+        <p class="hint">Accepts any text file — supports -history output</p>
+      </div>
+      <input type="file" id="dump-file-input">
+      <div class="upload-actions">
+        <button class="btn sm" onclick="openModal('dump')">Paste text</button>
+        <button class="btn sm danger" onclick="clearDump()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Hashcat pot card -->
+    <div class="upload-card">
+      <div class="upload-card-header">
+        <span class="dot" id="dot-pot2"></span>
+        <h3>Hashcat Pot File(s)</h3>
+        <span class="source-tag hidden" id="pot-source-tag"></span>
+      </div>
+      <div class="drop-zone" id="pot-drop-zone"
+           onclick="document.getElementById('pot-file-input').click()"
+           ondragover="onDragOver(event,'pot-drop-zone')"
+           ondragleave="onDragLeave('pot-drop-zone')"
+           ondrop="onDropPot(event)">
+        <p id="pot-drop-text">Drop file(s) here or click to browse</p>
+        <p class="hint">Format: <span style="font-family:monospace">NTLMHASH:password</span> or <span style="font-family:monospace">$NT$HASH:password</span></p>
+      </div>
+      <input type="file" id="pot-file-input" multiple>
+      <div class="upload-actions">
+        <button class="btn sm" onclick="openModal('pot')">Paste text</button>
+        <button class="btn sm danger" onclick="clearPot()">Clear Pot</button>
+      </div>
+    </div>
+
+  </div><!-- /upload-grid -->
+
+  <!-- Tab bar (hidden until data is loaded) -->
+  <div class="tab-bar hidden" id="tab-bar">
+    <button class="tab-btn active" data-tab="overview"  onclick="switchTab('overview')">Overview</button>
+    <button class="tab-btn"        data-tab="hashes"    onclick="switchTab('hashes')">All Hashes</button>
+    <button class="tab-btn"        data-tab="analysis"  onclick="switchTab('analysis')">Analysis</button>
+  </div>
+
+  <!-- ─── Tab: Overview ────────────────────────────────────────────────────── -->
+  <div id="tab-overview" class="tab-panel hidden">
+
+    <!-- Stats strip -->
+    <div class="stats-grid" id="stats-section">
+      <div class="stat-card blue">
+        <div class="label">User Accounts</div>
+        <div class="value" id="stat-users">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Machine Accounts</div>
+        <div class="value" id="stat-machines">0</div>
+      </div>
+      <div class="stat-card green">
+        <div class="label">Cracked</div>
+        <div class="value" id="stat-cracked">0</div>
+      </div>
+      <div class="stat-card red">
+        <div class="label">Uncracked</div>
+        <div class="value" id="stat-uncracked">0</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="label">Crack Rate</div>
+        <div class="value" id="stat-rate">0%</div>
+      </div>
+    </div>
+
+    <!-- Top passwords chart -->
+    <div class="top-pw-card hidden" id="top-pw-section">
+      <h3>Top Passwords</h3>
+      <div id="top-pw-list"></div>
+    </div>
+
+    <!-- Data section (user table) -->
+    <div id="data-section">
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <input type="text" class="search-input" id="search-input"
+               placeholder="Search username, hash, or password…">
+
+        <select id="filter-cracked" onchange="filterChanged()">
+          <option value="all">All entries</option>
+          <option value="cracked">Cracked only</option>
+          <option value="uncracked">Uncracked only</option>
+        </select>
+
+        <select id="filter-domain" onchange="filterChanged()">
+          <option value="all">All domains</option>
+        </select>
+
+        <span class="toolbar-sep"></span>
+
+        <label class="toggle-label">
+          <input type="checkbox" id="chk-machines" onchange="filterChanged()">
+          Show machines
+        </label>
+
+        <span class="toolbar-sep"></span>
+
+        <select id="per-page-sel" onchange="perPageChanged()">
+          <option value="50">50 / page</option>
+          <option value="100" selected>100 / page</option>
+          <option value="250">250 / page</option>
+          <option value="500">500 / page</option>
+        </select>
+
+        <div class="toolbar-right">
+          <button class="btn sm" onclick="copyUncracked()" title="Copy all unique uncracked NT hashes to clipboard">
+            Copy Uncracked Hashes
+          </button>
+          <button class="btn sm" onclick="exportWordlist()" id="btn-wordlist" title="Download all unique cracked passwords as a wordlist" disabled>
+            Export Wordlist
+          </button>
+          <button class="btn sm" onclick="exportCSV()">Export CSV</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('username')">Username<span class="sort-arrow" id="sa-username"></span></th>
+              <th onclick="sortBy('domain')">Domain<span class="sort-arrow" id="sa-domain"></span></th>
+              <th onclick="sortBy('rid')">RID<span class="sort-arrow" id="sa-rid"></span></th>
+              <th>NTLM Hash</th>
+              <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
+              <th>History</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination-bar">
+          <span id="pagination-info"></span>
+          <div class="page-btns">
+            <button class="btn sm" onclick="prevPage()">← Prev</button>
+            <span id="page-label" style="padding:5px 10px; color:var(--text-muted); font-size:12px;"></span>
+            <button class="btn sm" onclick="nextPage()">Next →</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /data-section -->
+
+  </div><!-- /tab-overview -->
+
+  <!-- ─── Tab: All Hashes ──────────────────────────────────────────────────── -->
+  <div id="tab-hashes" class="tab-panel hidden">
+
+    <div class="toolbar">
+      <input type="text" class="search-input" id="hash-search-input"
+             placeholder="Search username, domain, or hash…">
+
+      <select id="hash-filter-domain" onchange="hashFilterChanged()">
+        <option value="all">All domains</option>
+      </select>
+
+      <span class="toolbar-sep"></span>
+
+      <label class="toggle-label">
+        <input type="checkbox" id="hash-chk-machines" onchange="hashFilterChanged()">
+        Show machines
+      </label>
+
+      <span class="toolbar-sep"></span>
+
+      <select id="hash-per-page-sel" onchange="hashPerPageChanged()">
+        <option value="50">50 / page</option>
+        <option value="100" selected>100 / page</option>
+        <option value="250">250 / page</option>
+        <option value="500">500 / page</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="hashSortBy('username')">Username<span class="sort-arrow" id="hsa-username"></span></th>
+            <th onclick="hashSortBy('domain')">Domain<span class="sort-arrow" id="hsa-domain"></span></th>
+            <th>NT Hash (RC4)</th>
+            <th>AES-256 Key</th>
+            <th>AES-128 Key</th>
+            <th>DES Key</th>
+          </tr>
+        </thead>
+        <tbody id="hash-table-body"></tbody>
+      </table>
+
+      <div class="pagination" id="hash-pagination-bar">
+        <span id="hash-pagination-info"></span>
+        <div class="page-btns">
+          <button class="btn sm" onclick="hashPrevPage()">← Prev</button>
+          <span id="hash-page-label" style="padding:5px 10px; color:var(--text-muted); font-size:12px;"></span>
+          <button class="btn sm" onclick="hashNextPage()">Next →</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-hashes -->
+
+  <!-- ─── Tab: Analysis ────────────────────────────────────────────────────── -->
+  <div id="tab-analysis" class="tab-panel hidden">
+
+    <!-- No-data placeholder -->
+    <div id="analysis-empty" class="analysis-card" style="text-align:center;padding:60px 24px;color:var(--text-muted);">
+      No cracked passwords yet — load a hashcat pot file to enable analysis.
+    </div>
+
+    <!-- ── Complexity & length stats ── -->
+    <div id="analysis-stats-section" class="hidden">
+
+      <div class="analysis-card">
+        <div class="analysis-hdr">
+          <div>
+            <h3>Password Statistics</h3>
+            <div class="analysis-meta" id="analysis-meta"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn sm" onclick="exportWordlist()" title="Download all cracked passwords as a wordlist">Export Wordlist</button>
+            <button class="btn sm" onclick="exportWordWordlist()" title="Download most-used word tokens as a wordlist">Export Word List</button>
+          </div>
+        </div>
+
+        <!-- Char-class pills -->
+        <div class="len-section-lbl">Character Classes (% of cracked passwords containing each class)</div>
+        <div class="cc-row" id="cc-row"></div>
+
+        <!-- Complexity breakdown -->
+        <div class="len-section-lbl" style="margin-top:4px;">Complexity (number of character classes used)</div>
+        <div class="complexity-grid" id="complexity-grid"></div>
+
+        <!-- Length metrics -->
+        <div class="len-section-lbl">Password Length</div>
+        <div class="len-metrics" id="len-metrics"></div>
+
+        <!-- Length distribution chart -->
+        <div class="len-section-lbl">Length Distribution</div>
+        <div class="length-chart" id="length-chart"></div>
+
+        <!-- Top words & prefixes -->
+        <div class="two-col" id="words-prefixes-section">
+          <div class="mini-card">
+            <h4>Top Words in Passwords</h4>
+            <div id="top-words-list"></div>
+          </div>
+          <div class="mini-card">
+            <h4>Top Prefixes</h4>
+            <div id="top-prefixes-list"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Mask analysis -->
+      <div class="analysis-card">
+        <div class="analysis-hdr">
+          <div>
+            <h3>Hashcat Mask Analysis</h3>
+            <div class="analysis-meta" id="masks-meta"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn sm" onclick="copyMaskFile()" title="Copy all masks — one per line, ready for hashcat -a 3">Copy .hcmask</button>
+            <button class="btn sm" onclick="exportMaskFile()" title="Save as .hcmask file">Export .hcmask</button>
+          </div>
+        </div>
+
+        <div class="masks-wrap" id="masks-wrap">
+          <table class="masks-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Pattern</th>
+                <th>Hashcat mask</th>
+                <th>Len</th>
+                <th>Count</th>
+                <th>Example(s)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="masks-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /analysis-stats-section -->
+
+  </div><!-- /tab-analysis -->
+
+  <!-- Empty state -->
+  <div id="empty-state">
+    <div class="empty-logo">··</div>
+    <h2>DotDitto — No data loaded</h2>
+    <p>Upload a secretsdump NTDS output file to get started.<br>
+       Optionally load a hashcat pot file to see cracked passwords.</p>
+  </div>
+
+</main>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   State
+══════════════════════════════════════════════════════════════════════════ */
+const state = {
+  hasDump: false,
+  hasPot:  false,
+  page:    1,
+  perPage: 100,
+  totalPages: 1,
+  totalRows:  0,
+  sortCol:    'username',
+  sortDir:    'asc',
+  search:     '',
+  cracked:    'all',
+  domain:     'all',
+  showMachines: false,
+  lastParams: {},
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   API helper
+══════════════════════════════════════════════════════════════════════════ */
+async function api(method, path, body = null) {
+  const opts = { method };
+  if (body instanceof FormData) {
+    opts.body = body;
+  } else if (body) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Toast
+══════════════════════════════════════════════════════════════════════════ */
+function toast(msg, type = 'info', duration = 3500) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Modal (paste)
+══════════════════════════════════════════════════════════════════════════ */
+let _modalMode = null;
+
+function openModal(mode) {
+  _modalMode = mode;
+  document.getElementById('modal-title').textContent =
+    mode === 'dump' ? 'Paste secretsdump output' : 'Paste hashcat pot file contents';
+  document.getElementById('modal-textarea').value = '';
+  document.getElementById('modal-textarea').placeholder =
+    mode === 'dump'
+      ? 'DOMAIN\\username:RID:LMHash:NTHash:::\n...'
+      : 'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('modal-textarea').focus(), 50);
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+async function submitModal() {
+  const text = document.getElementById('modal-textarea').value.trim();
+  if (!text) { toast('Nothing to load', 'error'); return; }
+  document.getElementById('modal-overlay').classList.add('hidden');
+  if (_modalMode === 'dump') {
+    await loadPasteDump(text);
+  } else {
+    await loadPastePot(text);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Drag-and-drop helpers
+══════════════════════════════════════════════════════════════════════════ */
+function onDragOver(e, zoneId) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.add('drag-over');
+}
+function onDragLeave(zoneId) {
+  document.getElementById(zoneId).classList.remove('drag-over');
+}
+
+function onDropDump(e) {
+  e.preventDefault();
+  document.getElementById('dump-drop-zone').classList.remove('drag-over');
+  const files = e.dataTransfer.files;
+  if (files.length) loadFileDump(files[0]);
+}
+function onDropPot(e) {
+  e.preventDefault();
+  document.getElementById('pot-drop-zone').classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadFilePot(e.dataTransfer.files);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Upload — dump
+══════════════════════════════════════════════════════════════════════════ */
+document.getElementById('dump-file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadFileDump(e.target.files[0]);
+  e.target.value = '';
+});
+
+async function loadFileDump(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await api('POST', '/api/upload/dump', fd);
+    setDumpStatus(true, `${file.name}  (${res.total} users${res.history ? ', ' + res.history + ' hist' : ''}${res.machines ? ', ' + res.machines + ' machines' : ''})`);
+    toast(`Loaded ${res.total} user accounts`, 'success');
+    await refresh(true);
+  } catch (err) {
+    toast(`Dump error: ${err.message}`, 'error', 5000);
+    document.getElementById('dump-drop-zone').classList.add('error-border');
+  }
+}
+
+async function loadPasteDump(text) {
+  try {
+    const res = await api('POST', '/api/paste/dump', { text });
+    setDumpStatus(true, `Pasted  (${res.total} users${res.history ? ', ' + res.history + ' hist' : ''})`);
+    toast(`Loaded ${res.total} user accounts`, 'success');
+    await refresh(true);
+  } catch (err) {
+    toast(`Dump error: ${err.message}`, 'error', 5000);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Upload — pot
+══════════════════════════════════════════════════════════════════════════ */
+document.getElementById('pot-file-input').addEventListener('change', e => {
+  if (e.target.files.length) loadFilePot(e.target.files);
+  e.target.value = '';
+});
+
+async function loadFilePot(files) {
+  const fd = new FormData();
+  Array.from(files).forEach(f => fd.append('files', f));
+  try {
+    const res = await api('POST', '/api/upload/pot', fd);
+    const names = res.filenames.join(', ');
+    setPotStatus(true, `${names}  (${res.count} new, ${res.total_pot} total)`);
+    toast(`Loaded ${res.count} pot entries`, 'success');
+    if (state.hasDump) await refresh(true);
+  } catch (err) {
+    toast(`Pot error: ${err.message}`, 'error', 5000);
+  }
+}
+
+async function loadPastePot(text) {
+  try {
+    const res = await api('POST', '/api/paste/pot', { text });
+    setPotStatus(true, `Pasted  (${res.count} new, ${res.total_pot} total)`);
+    toast(`Loaded ${res.count} pot entries`, 'success');
+    if (state.hasDump) await refresh(true);
+  } catch (err) {
+    toast(`Pot error: ${err.message}`, 'error', 5000);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Clear
+══════════════════════════════════════════════════════════════════════════ */
+async function clearDump() {
+  if (!confirm('Clear the loaded dump? (Pot file will be kept.)')) return;
+  try {
+    await api('POST', '/api/clear');
+    setDumpStatus(false, '');
+    setPotStatus(false, '');
+    state.hasDump = false; state.hasPot = false;
+    hideDataUI();
+    toast('Cleared', 'info');
+    updateHeaderBtns();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function clearPot() {
+  try {
+    await api('POST', '/api/clear/pot');
+    setPotStatus(false, '');
+    state.hasPot = false;
+    if (state.hasDump) await refresh(true);
+    toast('Pot cleared', 'info');
+    updateHeaderBtns();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function clearAll() {
+  if (!confirm('Clear all data (dump + pot)?')) return;
+  try {
+    await api('POST', '/api/clear');
+    setDumpStatus(false, '');
+    setPotStatus(false, '');
+    state.hasDump = false; state.hasPot = false;
+    hideDataUI();
+    toast('All data cleared', 'info');
+    updateHeaderBtns();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Import / Export
+══════════════════════════════════════════════════════════════════════════ */
+document.getElementById('import-json-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await api('POST', '/api/import/json', fd);
+    toast(`Imported: ${res.user_count} users, ${res.pot_count} pot entries`, 'success');
+    await refresh(true);
+  } catch (err) { toast(`Import error: ${err.message}`, 'error', 5000); }
+});
+
+function exportJSON() {
+  window.location.href = '/api/export/json';
+}
+
+function exportCSV() {
+  const p = new URLSearchParams({ ...state.lastParams, show_history: false });
+  window.location.href = `/api/export/csv?${p}`;
+}
+
+function exportWordlist() {
+  window.location.href = '/api/export/wordlist';
+  toast('Downloading wordlist…', 'info', 2000);
+}
+
+function exportWordWordlist() {
+  window.location.href = '/api/export/wordlist/words';
+  toast('Downloading word-token list…', 'info', 2000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Copy uncracked hashes
+══════════════════════════════════════════════════════════════════════════ */
+async function copyUncracked() {
+  try {
+    const res = await api('GET', '/api/uncracked-hashes');
+    if (res.count === 0) { toast('No uncracked hashes', 'info'); return; }
+    const text = res.hashes.join('\n');
+    await navigator.clipboard.writeText(text).catch(() => {
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    });
+    toast(`Copied ${res.count} uncracked NT hashes`, 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).catch(() => {
+    const el = document.createElement('textarea');
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+  });
+  toast('Copied', 'success', 1500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Filtering & pagination
+══════════════════════════════════════════════════════════════════════════ */
+let _searchTimer = null;
+
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => {
+    state.search = e.target.value;
+    state.page = 1;
+    loadUsers();
+  }, 280);
+});
+
+function filterChanged() {
+  state.cracked      = document.getElementById('filter-cracked').value;
+  state.domain       = document.getElementById('filter-domain').value;
+  state.showMachines = document.getElementById('chk-machines').checked;
+  state.page = 1;
+  loadUsers();
+}
+
+function perPageChanged() {
+  state.perPage = parseInt(document.getElementById('per-page-sel').value);
+  state.page = 1;
+  loadUsers();
+}
+
+function sortBy(col) {
+  if (state.sortCol === col) {
+    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.sortCol = col;
+    state.sortDir = 'asc';
+  }
+  loadUsers();
+}
+
+function prevPage() { if (state.page > 1) { state.page--; loadUsers(); } }
+function nextPage() { if (state.page < state.totalPages) { state.page++; loadUsers(); } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Data loading
+══════════════════════════════════════════════════════════════════════════ */
+async function refresh(resetPage = false) {
+  if (resetPage) state.page = 1;
+  const tasks = [loadStats(), loadUsers(), loadAnalysis()];
+  if (_activeTab === 'hashes') tasks.push(loadHashesTab());
+  await Promise.all(tasks);
+  updateHeaderBtns();
+}
+
+async function loadStats() {
+  try {
+    const stats = await api('GET', '/api/stats');
+    state.hasDump = stats.total_users > 0 || stats.machine_accounts > 0;
+    renderStats(stats);
+    renderTopPasswords(stats.top_passwords);
+    buildDomainFilter(stats.domains);
+    updateIndicators(stats);
+  } catch (err) { console.error('stats error', err); }
+}
+
+async function loadUsers() {
+  const params = {
+    page:         state.page,
+    per_page:     state.perPage,
+    search:       state.search,
+    cracked:      state.cracked,
+    domain:       state.domain,
+    show_history: true,
+    show_machines: state.showMachines,
+    sort_by:      state.sortCol,
+    sort_dir:     state.sortDir,
+  };
+  state.lastParams = params;
+  try {
+    const qs = new URLSearchParams(params);
+    const data = await api('GET', `/api/users?${qs}`);
+    state.totalPages = data.pages;
+    state.totalRows  = data.total;
+    renderTable(data.users);
+    renderPagination(data);
+    showDataUI();
+  } catch (err) {
+    console.error('users error', err);
+    toast('Error loading users: ' + err.message, 'error');
+  }
+}
+
+async function initSession() {
+  try {
+    const info = await api('GET', '/api/session');
+    state.hasDump = info.has_dump;
+    state.hasPot  = info.has_pot;
+
+    if (info.has_dump) {
+      const n   = info.user_count;
+      const h   = info.history_count;
+      const src = info.metadata?.dump_sources?.join(', ') || 'saved session';
+      setDumpStatus(true, `${src}  (${n} users${h ? ', ' + h + ' hist' : ''})`);
+    }
+    if (info.has_pot) {
+      const src = info.metadata?.pot_sources?.join(', ') || 'saved session';
+      setPotStatus(true, `${src}  (${info.pot_count} hashes)`);
+    }
+    if (info.has_dump) {
+      await refresh();
+    }
+    updateHeaderBtns();
+  } catch (err) { console.error('init error', err); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Rendering — stats
+══════════════════════════════════════════════════════════════════════════ */
+function renderStats(s) {
+  document.getElementById('stat-users').textContent    = s.total_users.toLocaleString();
+  document.getElementById('stat-machines').textContent = s.machine_accounts.toLocaleString();
+  document.getElementById('stat-cracked').textContent  = s.cracked.toLocaleString();
+  document.getElementById('stat-uncracked').textContent = s.uncracked.toLocaleString();
+  document.getElementById('stat-rate').textContent     = s.crack_rate + '%';
+}
+
+function renderTopPasswords(list) {
+  const sec  = document.getElementById('top-pw-section');
+  const cont = document.getElementById('top-pw-list');
+  if (!list || list.length === 0) { sec.classList.add('hidden'); return; }
+  const max = list[0].count;
+  cont.innerHTML = list.map(({ password, count }) => {
+    const barW = Math.round(count / max * 280);
+    return `<div class="pw-bar-row">
+      <div class="pw-bar-fill" style="width:${barW}px"></div>
+      <span class="pw-bar-label" title="${esc(password)}">${esc(password)}</span>
+      <span class="pw-bar-count">${count} user${count > 1 ? 's' : ''}</span>
+    </div>`;
+  }).join('');
+  sec.classList.remove('hidden');
+}
+
+function buildDomainFilter(domains) {
+  ['filter-domain', 'hash-filter-domain'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="all">All domains</option>';
+    for (const d of domains) {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d;
+      if (d === cur) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Analysis tab
+══════════════════════════════════════════════════════════════════════════ */
+let _analysisData = null;
+
+async function loadAnalysis() {
+  try {
+    const data = await api('GET', '/api/analysis');
+    _analysisData = data;
+    renderAnalysis(data);
+  } catch (err) {
+    console.error('analysis error', err);
+  }
+}
+
+function renderAnalysis(data) {
+  const empty   = document.getElementById('analysis-empty');
+  const section = document.getElementById('analysis-stats-section');
+
+  if (!data || data.total === 0) {
+    empty.classList.remove('hidden');
+    section.classList.add('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  section.classList.remove('hidden');
+
+  document.getElementById('analysis-meta').textContent =
+    `${data.total.toLocaleString()} cracked passwords  ·  ${data.unique_masks.toLocaleString()} unique mask patterns`;
+
+  document.getElementById('masks-meta').textContent =
+    `Top ${data.masks.length} of ${data.unique_masks.toLocaleString()} unique patterns`;
+
+  /* ── Char-class pills ── */
+  const cc = data.char_classes || {};
+  document.getElementById('cc-row').innerHTML = [
+    { cls: 'upper',   label: 'Uppercase',  val: cc.upper   },
+    { cls: 'lower',   label: 'Lowercase',  val: cc.lower   },
+    { cls: 'digit',   label: 'Digits',     val: cc.digit   },
+    { cls: 'special', label: 'Special',    val: cc.special },
+  ].map(({ cls, label, val }) =>
+    `<span class="cc-pill ${cls}">
+      <span class="cc-pct">${val ?? 0}%</span>
+      <span style="color:var(--text-muted)">${label}</span>
+    </span>`
+  ).join('');
+
+  /* ── Complexity cards ── */
+  const cx = data.complexity || {};
+  const complexityDefs = [
+    { key: 'single_class', cls: 'c1', label: 'Single class',  sub: 'e.g. all lowercase' },
+    { key: 'two_class',    cls: 'c2', label: 'Two classes',   sub: 'e.g. lower + digit' },
+    { key: 'three_class',  cls: 'c3', label: 'Three classes', sub: 'e.g. upper+lower+digit' },
+    { key: 'four_class',   cls: 'c4', label: 'All four',      sub: 'upper+lower+digit+special' },
+  ];
+  document.getElementById('complexity-grid').innerHTML = complexityDefs.map(d => {
+    const v = cx[d.key] || { count: 0, pct: 0 };
+    return `<div class="complexity-card ${d.cls}">
+      <div class="cc-label">${d.label}</div>
+      <div class="cc-value">${v.count.toLocaleString()}</div>
+      <div class="cc-sub">${v.pct}%  ·  ${d.sub}</div>
+    </div>`;
+  }).join('');
+
+  /* ── Length metrics ── */
+  document.getElementById('len-metrics').innerHTML = [
+    { val: cx.avg_length,    lbl: 'Avg length'    },
+    { val: cx.median_length, lbl: 'Median length' },
+    { val: cx.min_length,    lbl: 'Shortest'      },
+    { val: cx.max_length,    lbl: 'Longest'       },
+  ].map(({ val, lbl }) =>
+    `<div class="len-metric">
+      <div class="lm-val">${val ?? '—'}</div>
+      <div class="lm-lbl">${lbl}</div>
+    </div>`
+  ).join('');
+
+  /* ── Length distribution chart ── */
+  const maxCount = Math.max(...data.lengths.map(l => l.count), 1);
+  document.getElementById('length-chart').innerHTML = data.lengths.map(({ length, count }) => {
+    const h = Math.max(Math.round(count / maxCount * 46), 3);
+    return `<div class="len-col" title="Length ${length}: ${count} password${count > 1 ? 's' : ''}">
+      <div class="len-bar" style="height:${h}px"></div>
+      <div class="len-lbl">${length}</div>
+    </div>`;
+  }).join('');
+
+  /* ── Top words ── */
+  const wordList  = data.top_words   || [];
+  const prefList  = data.top_prefixes || [];
+  const maxWord   = wordList.length  ? wordList[0].count  : 1;
+  const maxPref   = prefList.length  ? prefList[0].count  : 1;
+
+  document.getElementById('top-words-list').innerHTML = wordList.length === 0
+    ? '<div style="color:var(--text-muted);font-size:12px;">No word tokens found</div>'
+    : wordList.slice(0, 15).map(({ word, count }) => {
+        const barW = Math.round(count / maxWord * 120);
+        return `<div class="mini-bar-row">
+          <div class="word-bar-fill" style="width:${barW}px"></div>
+          <span class="mini-bar-label" style="color:var(--purple)" title="${esc(word)}">${esc(word)}</span>
+          <span class="mini-bar-count">${count}</span>
+        </div>`;
+      }).join('');
+
+  /* ── Top prefixes ── */
+  document.getElementById('top-prefixes-list').innerHTML = prefList.length === 0
+    ? '<div style="color:var(--text-muted);font-size:12px;">No prefixes found</div>'
+    : prefList.slice(0, 15).map(({ prefix, count }) => {
+        const barW = Math.round(count / maxPref * 120);
+        return `<div class="mini-bar-row">
+          <div class="prefix-bar-fill" style="width:${barW}px"></div>
+          <span class="mini-bar-label" style="color:var(--yellow)" title="${esc(prefix)}">${esc(prefix)}</span>
+          <span class="mini-bar-count">${count}</span>
+        </div>`;
+      }).join('');
+
+  /* ── Masks table ── */
+  const topCount = data.masks.length ? data.masks[0].count : 1;
+  document.getElementById('masks-tbody').innerHTML = data.masks.map((m, i) => {
+    const pct  = Math.round(m.count / data.total * 100);
+    const barW = Math.round(m.count / topCount * 90);
+    const examples = m.examples.map(e => `<span class="mask-example">${esc(e)}</span>`).join(', ');
+    return `<tr>
+      <td style="color:var(--text-muted);font-size:11px;width:28px">${i + 1}</td>
+      <td><span class="pattern-str">${esc(m.pattern)}</span></td>
+      <td><span class="mask-str">${m.mask}</span></td>
+      <td style="color:var(--text-muted);text-align:center">${m.length}</td>
+      <td>
+        <div class="mask-count-bar">
+          <div class="mask-count-fill" style="width:${barW}px"></div>
+          <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">
+            ${m.count} <span style="opacity:.55">(${pct}%)</span>
+          </span>
+        </div>
+      </td>
+      <td>${examples}</td>
+      <td><button class="btn sm" style="padding:2px 9px;font-size:11px" onclick="copyText('${m.mask}')">copy</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function copyMaskFile() {
+  if (!_analysisData?.masks?.length) { toast('No masks available', 'error'); return; }
+  const text = _analysisData.masks.map(m => m.mask).join('\n');
+  navigator.clipboard.writeText(text).catch(() => {
+    const el = document.createElement('textarea');
+    el.value = text; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+  });
+  toast(`Copied ${_analysisData.masks.length} masks to clipboard`, 'success');
+}
+
+function exportMaskFile() {
+  if (!_analysisData?.masks?.length) { toast('No masks available', 'error'); return; }
+  const text = _analysisData.masks.map(m => m.mask).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'dotditto_masks.hcmask'; a.click();
+  URL.revokeObjectURL(url);
+  toast('Exported dotditto_masks.hcmask', 'success');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tab management
+══════════════════════════════════════════════════════════════════════════ */
+let _activeTab = 'overview';
+
+function switchTab(name) {
+  _activeTab = name;
+  ['overview', 'hashes', 'analysis'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
+    const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
+    if (btn) btn.classList.toggle('active', t === name);
+  });
+  if (name === 'hashes') loadHashesTab();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   All Hashes tab
+══════════════════════════════════════════════════════════════════════════ */
+const hashState = {
+  page: 1, perPage: 100, totalPages: 1, totalRows: 0,
+  sortCol: 'username', sortDir: 'asc',
+  search: '', domain: 'all', showMachines: false,
+};
+
+let _hashSearchTimer = null;
+document.getElementById('hash-search-input').addEventListener('input', e => {
+  clearTimeout(_hashSearchTimer);
+  _hashSearchTimer = setTimeout(() => {
+    hashState.search = e.target.value;
+    hashState.page = 1;
+    loadHashesTab();
+  }, 280);
+});
+
+function hashFilterChanged() {
+  hashState.domain      = document.getElementById('hash-filter-domain').value;
+  hashState.showMachines = document.getElementById('hash-chk-machines').checked;
+  hashState.page = 1;
+  loadHashesTab();
+}
+
+function hashPerPageChanged() {
+  hashState.perPage = parseInt(document.getElementById('hash-per-page-sel').value);
+  hashState.page = 1;
+  loadHashesTab();
+}
+
+function hashSortBy(col) {
+  if (hashState.sortCol === col) {
+    hashState.sortDir = hashState.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    hashState.sortCol = col;
+    hashState.sortDir = 'asc';
+  }
+  loadHashesTab();
+}
+
+function hashPrevPage() { if (hashState.page > 1) { hashState.page--; loadHashesTab(); } }
+function hashNextPage() { if (hashState.page < hashState.totalPages) { hashState.page++; loadHashesTab(); } }
+
+async function loadHashesTab() {
+  const params = {
+    page:          hashState.page,
+    per_page:      hashState.perPage,
+    search:        hashState.search,
+    cracked:       'all',
+    domain:        hashState.domain,
+    show_history:  false,
+    show_machines: hashState.showMachines,
+    sort_by:       hashState.sortCol,
+    sort_dir:      hashState.sortDir,
+  };
+  try {
+    const qs = new URLSearchParams(params);
+    const data = await api('GET', `/api/users?${qs}`);
+    hashState.totalPages = data.pages;
+    hashState.totalRows  = data.total;
+    renderHashesTable(data.users);
+    renderHashesPagination(data);
+  } catch (err) {
+    console.error('hashes error', err);
+    toast('Error loading hashes: ' + err.message, 'error');
+  }
+}
+
+function renderHashesTable(users) {
+  const tbody = document.getElementById('hash-table-body');
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    updateHashSortArrows();
+    return;
+  }
+  tbody.innerHTML = users.map(u => {
+    return `<tr class="${u.is_machine ? 'row-machine' : ''}">
+      <td class="mono">${esc(u.username)}</td>
+      <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
+      <td>${hashCol(u.nt_hash)}</td>
+      <td>${hashCol(u.aes256)}</td>
+      <td>${hashCol(u.aes128)}</td>
+      <td>${hashCol(u.des)}</td>
+    </tr>`;
+  }).join('');
+  updateHashSortArrows();
+}
+
+function hashCol(hash) {
+  if (!hash) return '<span class="hash-none">—</span>';
+  const display = hash.length > 22 ? hash.slice(0, 18) + '…' : hash;
+  return `<div class="hash-cell">
+    <span class="hash-truncated" title="${hash}">${display}</span>
+    <button class="hash-copy-btn" onclick="copyText('${hash}')">copy</button>
+  </div>`;
+}
+
+function updateHashSortArrows() {
+  ['username', 'domain'].forEach(col => {
+    const el = document.getElementById(`hsa-${col}`);
+    if (el) el.textContent = hashState.sortCol === col ? (hashState.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  });
+}
+
+function renderHashesPagination(data) {
+  const start = (data.page - 1) * data.per_page + 1;
+  const end   = Math.min(data.page * data.per_page, data.total);
+  document.getElementById('hash-pagination-info').textContent =
+    data.total > 0 ? `Showing ${start}–${end} of ${data.total.toLocaleString()} entries` : 'No entries';
+  document.getElementById('hash-page-label').textContent = `Page ${data.page} / ${data.pages}`;
+}
+
+/* ── Hash cell helper ─────────────────────────────────────────────── */
+function hashCell(h) {
+  return `<span class="hash-text">${h}</span> `
+       + `<button class="copy-btn" onclick="copyText('${h}')">copy</button>`;
+}
+
+/* ── Current page users (for popup lookup) ───────────────────────── */
+let _pageUsers = [];
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Main table renderer
+══════════════════════════════════════════════════════════════════════════ */
+function renderTable(users) {
+  _pageUsers = users;
+  const tbody = document.getElementById('table-body');
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    updateSortArrows();
+    return;
+  }
+
+  const rows = [];
+  for (let i = 0; i < users.length; i++) {
+    const u           = users[i];
+    const history     = u.history || [];
+    const hasHist     = history.length > 0;
+    const histCracked = history.filter(h => h.password);
+
+    /* Password cell */
+    let pwHtml;
+    if (u.password) {
+      const shared = (u.password_count || 1) > 1
+        ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
+      pwHtml = `<span class="pw-cracked">${esc(u.password)}</span>${shared} `
+             + `<button class="copy-btn" onclick="event.stopPropagation();copyText(${JSON.stringify(u.password)})">copy</button>`;
+    } else {
+      const warn = histCracked.length > 0
+        ? `<span class="badge-hist-warn" title="A previous password was cracked — click to view">hist cracked</span>`
+        : '';
+      pwHtml = `<span class="pw-none">—</span>${warn}`;
+    }
+
+    /* History badge */
+    let histHtml = '';
+    if (u.is_machine) {
+      histHtml = '<span class="badge badge-machine">machine</span>';
+    } else if (hasHist) {
+      const cls = histCracked.length > 0 ? 'hist-summary has-cracked' : 'hist-summary';
+      const tip = `${histCracked.length} of ${history.length} historical passwords cracked — click row to view`;
+      histHtml = `<span class="${cls}" title="${tip}">⏱ ${histCracked.length}/${history.length} entries</span>`;
+    }
+
+    const click = hasHist ? `onclick="openHistoryModal(${i})"` : '';
+
+    rows.push(`<tr class="${hasHist ? 'row-has-history' : (u.is_machine ? 'row-machine' : '')}" ${click}>
+      <td class="mono">${esc(u.username)}</td>
+      <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
+      <td style="color:var(--text-muted)">${u.rid}</td>
+      <td>${hashCell(u.nt_hash)}</td>
+      <td>${pwHtml}</td>
+      <td>${histHtml}</td>
+    </tr>`);
+  }
+
+  tbody.innerHTML = rows.join('');
+  updateSortArrows();
+}
+
+function updateSortArrows() {
+  ['username','domain','rid','password'].forEach(col => {
+    const el = document.getElementById(`sa-${col}`);
+    if (el) el.textContent = state.sortCol === col ? (state.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   History detail popup
+   Order: Current (top) → Previous (hist_0) → 2 changes ago → … → Oldest
+══════════════════════════════════════════════════════════════════════════ */
+function openHistoryModal(idx) {
+  const u = _pageUsers[idx];
+  if (!u) return;
+
+  const history     = u.history || [];
+  const histCracked = history.filter(h => h.password).length;
+
+  document.getElementById('hist-modal-title').textContent =
+    (u.domain ? u.domain + '\\' : '') + u.username;
+  document.getElementById('hist-modal-sub').textContent =
+    `RID: ${u.rid}  ·  ${history.length} history entr${history.length === 1 ? 'y' : 'ies'}`
+    + (histCracked ? `  ·  ${histCracked} cracked` : '');
+
+  let html = '<div class="hist-timeline">';
+
+  /* ── Current entry (always at top) ── */
+  const curCracked = !!u.password;
+  html += `
+    <div class="hist-entry">
+      <div class="hist-dot is-current${curCracked ? ' is-cracked' : ''}"></div>
+      <div class="hist-entry-hdr"><span class="heh-tag">Current</span></div>
+      <div class="hist-card is-current${curCracked ? ' is-cracked' : ''}">
+        <div class="hf">
+          <span class="hf-lbl">NT hash</span>
+          <span class="hf-val" title="${u.nt_hash}">${u.nt_hash}</span>
+          <button class="hf-copy" onclick="copyText('${u.nt_hash}')">copy</button>
+        </div>
+        <div class="hf">
+          <span class="hf-lbl">Password</span>
+          ${curCracked
+            ? `<span class="hf-val cracked">${esc(u.password)}</span>
+               <button class="hf-copy" onclick="copyText(${JSON.stringify(u.password)})">copy</button>`
+            : `<span class="hf-val unknown">not cracked</span>`
+          }
+        </div>
+      </div>
+    </div>`;
+
+  /* ── History entries: ascending index (hist_0 = previous, hist_N = oldest) ── */
+  if (history.length === 0) {
+    html += `<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No history entries in this dump.</div>`;
+  } else {
+    /* Sort ascending: hist_0 (previous) first, hist_N (oldest) last */
+    const sortedHist = [...history].sort((a, b) => a.hist_index - b.hist_index);
+    sortedHist.forEach((h, pos) => {
+      const cracked     = !!h.password;
+      const reused      = h.nt_hash === u.nt_hash;
+      const reusedBadge = reused
+        ? `<span class="heh-reused">⚠ same hash as current</span>` : '';
+
+      let ageLabel;
+      if (h.hist_index === 0)       ageLabel = 'Previous';
+      else if (h.hist_index === 1)  ageLabel = '2 changes ago';
+      else                          ageLabel = `${h.hist_index + 1} changes ago`;
+
+      html += `
+        <div class="hist-entry">
+          <div class="hist-dot${cracked ? ' is-cracked' : ''}"></div>
+          <div class="hist-entry-hdr">
+            <span class="heh-tag">${ageLabel}</span>
+            ${reusedBadge}
+          </div>
+          <div class="hist-card${cracked ? ' is-cracked' : ''}">
+            <div class="hf">
+              <span class="hf-lbl">NT hash</span>
+              <span class="hf-val" title="${h.nt_hash}">${h.nt_hash}</span>
+              <button class="hf-copy" onclick="copyText('${h.nt_hash}')">copy</button>
+            </div>
+            <div class="hf">
+              <span class="hf-lbl">Password</span>
+              ${cracked
+                ? `<span class="hf-val cracked">${esc(h.password)}</span>
+                   <button class="hf-copy" onclick="copyText(${JSON.stringify(h.password)})">copy</button>`
+                : `<span class="hf-val unknown">not cracked</span>`
+              }
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+
+  html += '</div>';
+  document.getElementById('hist-modal-body').innerHTML = html;
+  document.getElementById('hist-modal-overlay').classList.remove('hidden');
+}
+
+function closeHistoryModal(e) {
+  if (e && e.target !== document.getElementById('hist-modal-overlay')) return;
+  document.getElementById('hist-modal-overlay').classList.add('hidden');
+}
+
+/* Close on Escape */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeHistoryModal();
+    closeModal();
+  }
+});
+
+function renderPagination(data) {
+  const start = (data.page - 1) * data.per_page + 1;
+  const end   = Math.min(data.page * data.per_page, data.total);
+  document.getElementById('pagination-info').textContent =
+    data.total > 0 ? `Showing ${start}–${end} of ${data.total.toLocaleString()} entries` : 'No entries';
+  document.getElementById('page-label').textContent = `Page ${data.page} / ${data.pages}`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UI state helpers
+══════════════════════════════════════════════════════════════════════════ */
+function showDataUI() {
+  document.getElementById('tab-bar').classList.remove('hidden');
+  document.getElementById('empty-state').classList.add('hidden');
+  document.getElementById(`tab-${_activeTab}`).classList.remove('hidden');
+}
+
+function hideDataUI() {
+  document.getElementById('tab-bar').classList.add('hidden');
+  ['overview', 'hashes', 'analysis'].forEach(t =>
+    document.getElementById(`tab-${t}`).classList.add('hidden')
+  );
+  document.getElementById('top-pw-section').classList.add('hidden');
+  document.getElementById('empty-state').classList.remove('hidden');
+  _activeTab = 'overview';
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === 'overview')
+  );
+}
+
+function setDumpStatus(on, label) {
+  ['dot-dump','dot-dump2'].forEach(id => {
+    document.getElementById(id).classList.toggle('on', on);
+  });
+  document.getElementById('lbl-dump').textContent = on ? `Dump: ${label}` : 'No dump loaded';
+  const tag = document.getElementById('dump-source-tag');
+  if (on) {
+    tag.textContent = label;
+    tag.classList.remove('hidden');
+    document.getElementById('dump-drop-zone').classList.add('loaded');
+    document.getElementById('dump-drop-text').textContent = '✓ ' + label;
+  } else {
+    tag.classList.add('hidden');
+    document.getElementById('dump-drop-zone').classList.remove('loaded');
+    document.getElementById('dump-drop-text').textContent = 'Drop file here or click to browse';
+  }
+}
+
+function setPotStatus(on, label) {
+  ['dot-pot','dot-pot2'].forEach(id => {
+    document.getElementById(id).classList.toggle('on', on);
+  });
+  document.getElementById('lbl-pot').textContent = on ? `Pot: ${label}` : 'No pot loaded';
+  const tag = document.getElementById('pot-source-tag');
+  if (on) {
+    tag.textContent = label;
+    tag.classList.remove('hidden');
+    document.getElementById('pot-drop-zone').classList.add('loaded');
+    document.getElementById('pot-drop-text').textContent = '✓ ' + label;
+  } else {
+    tag.classList.add('hidden');
+    document.getElementById('pot-drop-zone').classList.remove('loaded');
+    document.getElementById('pot-drop-text').textContent = 'Drop file(s) here or click to browse';
+  }
+}
+
+function updateIndicators(stats) { /* called after stats reload */ }
+
+function updateHeaderBtns() {
+  const hasDump = state.hasDump;
+  const hasPot  = state.hasPot;
+  document.getElementById('btn-export-json').disabled = !hasDump;
+  document.getElementById('btn-clear').disabled       = !hasDump;
+  const wlBtn = document.getElementById('btn-wordlist');
+  if (wlBtn) wlBtn.disabled = !(hasDump && hasPot);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Utility
+══════════════════════════════════════════════════════════════════════════ */
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Boot
+══════════════════════════════════════════════════════════════════════════ */
+initSession();
+</script>
+</body>
+</html>

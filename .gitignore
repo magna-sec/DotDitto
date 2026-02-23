@@ -1,0 +1,40 @@
+# DotDitto — gitignore
+
+# Session data (contains sensitive credential hashes — never commit)
+session.json
+
+# Python virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Hashcat pot files (contain cracked credentials — keep local only)
+*.pot
+*.potfile
