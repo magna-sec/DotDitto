@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python:*)",
-      "Bash(venv/Scripts/python.exe -c \"from parsers import parse_secretsdump, parse_pot_file; from session_store import session, save_session, apply_passwords, get_filtered_users, clear_session, replace_session, load_session_file; from analysis import run_analysis, build_word_wordlist; from routes import bp; from app import app; print\\(''All imports OK''\\); routes = sorted\\(str\\(r\\) for r in app.url_map.iter_rules\\(\\)\\); [print\\('' '', r\\) for r in routes]\")"
-    ]
-  }
-}
