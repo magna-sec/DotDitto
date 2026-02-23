@@ -23,6 +23,7 @@ build/
 
 # IDE / editor
 .vscode/
+.claude/
 .idea/
 *.swp
 *.swo
