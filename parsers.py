@@ -22,13 +22,17 @@ _HEX_RE = re.compile(r"^[a-fA-F0-9]+$")
 # secretsdump parser
 # ---------------------------------------------------------------------------
 
-def parse_secretsdump(text: str) -> list:
+def parse_secretsdump(text: str, source: str = "") -> list:
     """Parse impacket secretsdump NTDS output into a list of user dicts.
 
     Handles NTLM lines:  DOMAIN\\user:RID:LMHash:NTHash:::
     And Kerberos lines:  DOMAIN\\user:aes256-cts-hmac-sha1-96:hexhash
                          DOMAIN\\user:aes128-cts-hmac-sha1-96:hexhash
                          DOMAIN\\user:des-cbc-md5:hexhash
+
+    ``source`` is a human-readable label for the ntds.dit this dump came from
+    (e.g. the filename).  It is stored on every returned record as
+    ``dump_source`` so records from multiple imports can be distinguished.
     """
     users = []
     kerb_map: dict = {}  # (domain_lower, base_username_lower) -> {"aes256": ..., ...}
@@ -103,6 +107,7 @@ def parse_secretsdump(text: str) -> list:
                 "aes256": None,
                 "aes128": None,
                 "des": None,
+                "dump_source": source,
             }
         )
 

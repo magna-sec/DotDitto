@@ -543,6 +543,12 @@
 <div id="modal-overlay" class="hidden" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <h3 id="modal-title">Paste text</h3>
+    <div id="modal-source-row" style="display:none;margin-bottom:10px;">
+      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Source name (ntds.dit label)</label>
+      <input type="text" id="modal-source-input"
+             style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;"
+             placeholder="e.g. DC01, corp-domain.dit">
+    </div>
     <textarea id="modal-textarea" spellcheck="false" placeholder=""></textarea>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">Cancel</button>
@@ -703,6 +709,10 @@
           <option value="all">All domains</option>
         </select>
 
+        <select id="filter-source" onchange="filterChanged()">
+          <option value="all">All sources</option>
+        </select>
+
         <span class="toolbar-sep"></span>
 
         <label class="toggle-label">
@@ -741,6 +751,7 @@
               <th>NTLM Hash</th>
               <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
               <th>History</th>
+              <th>Source</th>
             </tr>
           </thead>
           <tbody id="table-body"></tbody>
@@ -772,6 +783,10 @@
         <option value="all">All domains</option>
       </select>
 
+      <select id="hash-filter-source" onchange="hashFilterChanged()">
+        <option value="all">All sources</option>
+      </select>
+
       <span class="toolbar-sep"></span>
 
       <label class="toggle-label">
@@ -799,6 +814,7 @@
             <th>AES-256 Key</th>
             <th>AES-128 Key</th>
             <th>DES Key</th>
+            <th>Source</th>
           </tr>
         </thead>
         <tbody id="hash-table-body"></tbody>
@@ -930,6 +946,7 @@ const state = {
   search:     '',
   cracked:    'all',
   domain:     'all',
+  source:     'all',
   showMachines: false,
   lastParams: {},
 };
@@ -976,6 +993,15 @@ function openModal(mode) {
     mode === 'dump'
       ? 'DOMAIN\\username:RID:LMHash:NTHash:::\n...'
       : 'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...';
+  // Show source name input only for dump pastes
+  const srcRow = document.getElementById('modal-source-row');
+  const srcInput = document.getElementById('modal-source-input');
+  if (mode === 'dump') {
+    srcRow.style.display = 'block';
+    srcInput.value = '';
+  } else {
+    srcRow.style.display = 'none';
+  }
   document.getElementById('modal-overlay').classList.remove('hidden');
   setTimeout(() => document.getElementById('modal-textarea').focus(), 50);
 }
@@ -988,9 +1014,12 @@ function closeModal(e) {
 async function submitModal() {
   const text = document.getElementById('modal-textarea').value.trim();
   if (!text) { toast('Nothing to load', 'error'); return; }
+  const source = (_modalMode === 'dump')
+    ? (document.getElementById('modal-source-input').value.trim() || '')
+    : '';
   document.getElementById('modal-overlay').classList.add('hidden');
   if (_modalMode === 'dump') {
-    await loadPasteDump(text);
+    await loadPasteDump(text, source);
   } else {
     await loadPastePot(text);
   }
@@ -1032,8 +1061,7 @@ async function loadFileDump(file) {
   fd.append('file', file);
   try {
     const res = await api('POST', '/api/upload/dump', fd);
-    setDumpStatus(true, `${file.name}  (${res.total} users${res.history ? ', ' + res.history + ' hist' : ''}${res.machines ? ', ' + res.machines + ' machines' : ''})`);
-    toast(`Loaded ${res.total} user accounts`, 'success');
+    toast(`Loaded ${res.total} user accounts from ${res.source}`, 'success');
     await refresh(true);
   } catch (err) {
     toast(`Dump error: ${err.message}`, 'error', 5000);
@@ -1041,11 +1069,10 @@ async function loadFileDump(file) {
   }
 }
 
-async function loadPasteDump(text) {
+async function loadPasteDump(text, source = '') {
   try {
-    const res = await api('POST', '/api/paste/dump', { text });
-    setDumpStatus(true, `Pasted  (${res.total} users${res.history ? ', ' + res.history + ' hist' : ''})`);
-    toast(`Loaded ${res.total} user accounts`, 'success');
+    const res = await api('POST', '/api/paste/dump', { text, source });
+    toast(`Loaded ${res.total} user accounts (source: ${res.source})`, 'success');
     await refresh(true);
   } catch (err) {
     toast(`Dump error: ${err.message}`, 'error', 5000);
@@ -1209,6 +1236,7 @@ document.getElementById('search-input').addEventListener('input', e => {
 function filterChanged() {
   state.cracked      = document.getElementById('filter-cracked').value;
   state.domain       = document.getElementById('filter-domain').value;
+  state.source       = document.getElementById('filter-source').value;
   state.showMachines = document.getElementById('chk-machines').checked;
   state.page = 1;
   loadUsers();
@@ -1251,6 +1279,8 @@ async function loadStats() {
     renderStats(stats);
     renderTopPasswords(stats.top_passwords);
     buildDomainFilter(stats.domains);
+    buildSourceFilter(stats.sources || []);
+    updateDumpStatusFromStats(stats);
     updateIndicators(stats);
   } catch (err) { console.error('stats error', err); }
 }
@@ -1262,6 +1292,7 @@ async function loadUsers() {
     search:       state.search,
     cracked:      state.cracked,
     domain:       state.domain,
+    source:       state.source,
     show_history: true,
     show_machines: state.showMachines,
     sort_by:      state.sortCol,
@@ -1288,18 +1319,12 @@ async function initSession() {
     state.hasDump = info.has_dump;
     state.hasPot  = info.has_pot;
 
-    if (info.has_dump) {
-      const n   = info.user_count;
-      const h   = info.history_count;
-      const src = info.metadata?.dump_sources?.join(', ') || 'saved session';
-      setDumpStatus(true, `${src}  (${n} users${h ? ', ' + h + ' hist' : ''})`);
-    }
     if (info.has_pot) {
       const src = info.metadata?.pot_sources?.join(', ') || 'saved session';
       setPotStatus(true, `${src}  (${info.pot_count} hashes)`);
     }
     if (info.has_dump) {
-      await refresh();
+      await refresh();  // loadStats → updateDumpStatusFromStats will set the dump status label
     }
     updateHeaderBtns();
   } catch (err) { console.error('init error', err); }
@@ -1345,6 +1370,38 @@ function buildDomainFilter(domains) {
       sel.appendChild(opt);
     }
   });
+}
+
+function buildSourceFilter(sources) {
+  ['filter-source', 'hash-filter-source'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="all">All sources</option>';
+    for (const s of sources) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      // Truncate long filenames in the dropdown label
+      opt.textContent = s.length > 40 ? s.slice(0, 37) + '…' : s;
+      opt.title = s;
+      if (s === cur) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    // Hide the dropdown when only one source (nothing to filter by)
+    sel.style.display = sources.length <= 1 ? 'none' : '';
+  });
+}
+
+function updateDumpStatusFromStats(stats) {
+  const sources = stats.sources || [];
+  const meta    = stats.metadata || {};
+  if (!state.hasDump) return;
+  const totalU = stats.total_users + stats.machine_accounts;
+  const hist   = stats.history_entries;
+  const label  = sources.length > 0
+    ? sources.join(', ') + `  (${totalU} accounts${hist ? ', ' + hist + ' hist' : ''})`
+    : `session  (${totalU} accounts)`;
+  setDumpStatus(true, label);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1532,7 +1589,7 @@ function switchTab(name) {
 const hashState = {
   page: 1, perPage: 100, totalPages: 1, totalRows: 0,
   sortCol: 'username', sortDir: 'asc',
-  search: '', domain: 'all', showMachines: false,
+  search: '', domain: 'all', source: 'all', showMachines: false,
 };
 
 let _hashSearchTimer = null;
@@ -1546,7 +1603,8 @@ document.getElementById('hash-search-input').addEventListener('input', e => {
 });
 
 function hashFilterChanged() {
-  hashState.domain      = document.getElementById('hash-filter-domain').value;
+  hashState.domain       = document.getElementById('hash-filter-domain').value;
+  hashState.source       = document.getElementById('hash-filter-source').value;
   hashState.showMachines = document.getElementById('hash-chk-machines').checked;
   hashState.page = 1;
   loadHashesTab();
@@ -1578,6 +1636,7 @@ async function loadHashesTab() {
     search:        hashState.search,
     cracked:       'all',
     domain:        hashState.domain,
+    source:        hashState.source,
     show_history:  false,
     show_machines: hashState.showMachines,
     sort_by:       hashState.sortCol,
@@ -1599,11 +1658,13 @@ async function loadHashesTab() {
 function renderHashesTable(users) {
   const tbody = document.getElementById('hash-table-body');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateHashSortArrows();
     return;
   }
   tbody.innerHTML = users.map(u => {
+    const srcLabel   = u.dump_source || '—';
+    const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
     return `<tr class="${u.is_machine ? 'row-machine' : ''}">
       <td class="mono">${esc(u.username)}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
@@ -1611,6 +1672,7 @@ function renderHashesTable(users) {
       <td>${hashCol(u.aes256)}</td>
       <td>${hashCol(u.aes128)}</td>
       <td>${hashCol(u.des)}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
     </tr>`;
   }).join('');
   updateHashSortArrows();
@@ -1656,7 +1718,7 @@ function renderTable(users) {
   _pageUsers = users;
   const tbody = document.getElementById('table-body');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateSortArrows();
     return;
   }
@@ -1694,6 +1756,8 @@ function renderTable(users) {
 
     const click = hasHist ? `onclick="openHistoryModal(${i})"` : '';
 
+    const srcLabel = u.dump_source || '—';
+    const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
     rows.push(`<tr class="${hasHist ? 'row-has-history' : (u.is_machine ? 'row-machine' : '')}" ${click}>
       <td class="mono">${esc(u.username)}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
@@ -1701,6 +1765,7 @@ function renderTable(users) {
       <td>${hashCell(u.nt_hash)}</td>
       <td>${pwHtml}</td>
       <td>${histHtml}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
     </tr>`);
   }
 

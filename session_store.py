@@ -45,6 +45,12 @@ def load_session_file() -> None:
             data = json.load(fh)
         if "users" in data:
             session.update(data)
+            # Ensure fields added after initial save exist on every user object
+            for u in session["users"]:
+                u.setdefault("aes256", None)
+                u.setdefault("aes128", None)
+                u.setdefault("des", None)
+                u.setdefault("dump_source", "")
             n_users = len([u for u in session["users"] if not u.get("is_history") and not u.get("is_machine")])
             n_pot = len(session.get("pot_hashes", {}))
             print(f"[info] loaded session: {n_users} user accounts, {n_pot} pot hashes")
@@ -79,11 +85,12 @@ def replace_session(data: dict) -> None:
         "metadata",
         {"created": None, "updated": None, "dump_sources": [], "pot_sources": []},
     )
-    # Ensure Kerberos fields exist on user objects from older sessions
+    # Ensure Kerberos and source fields exist on user objects from older sessions
     for u in session.get("users", []):
         u.setdefault("aes256", None)
         u.setdefault("aes128", None)
         u.setdefault("des", None)
+        u.setdefault("dump_source", "")
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +122,7 @@ def get_filtered_users(
     search: str = "",
     cracked: str = "all",
     domain: str = "all",
+    source: str = "all",
     show_history: bool = False,
     show_machines: bool = True,
     sort_by: str = "username",
@@ -143,6 +151,8 @@ def get_filtered_users(
         if u["is_machine"] and not show_machines:
             return False
         if domain != "all" and u["domain"] != domain:
+            return False
+        if source != "all" and u.get("dump_source", "") != source:
             return False
         if check_cracked:
             if cracked == "cracked" and not u["password"]:

@@ -43,15 +43,21 @@ def upload_dump():
     if not f:
         return jsonify({"error": "No file provided"}), 400
 
+    source = f.filename
     text = f.read().decode("utf-8", errors="replace")
-    users = parse_secretsdump(text)
+    users = parse_secretsdump(text, source=source)
     if not users:
         return jsonify({"error": "No valid secretsdump entries found in file"}), 400
 
-    session["users"] = users
+    # Replace any existing entries from this same source, then append new ones
+    session["users"] = [u for u in session["users"] if u.get("dump_source") != source]
+    session["users"].extend(users)
     if not session["metadata"]["created"]:
         session["metadata"]["created"] = datetime.now().isoformat()
-    session["metadata"]["dump_sources"] = [f.filename]
+    # Rebuild dump_sources from actual data so it stays in sync
+    session["metadata"]["dump_sources"] = sorted({
+        u["dump_source"] for u in session["users"] if u.get("dump_source")
+    })
     apply_passwords()
     save_session()
 
@@ -59,7 +65,8 @@ def upload_dump():
     machines = len([u for u in users if not u["is_history"] and u["is_machine"]])
     hist     = len([u for u in users if u["is_history"]])
     return jsonify(
-        {"success": True, "total": total, "machines": machines, "history": hist, "filename": f.filename}
+        {"success": True, "total": total, "machines": machines, "history": hist,
+         "filename": source, "source": source}
     )
 
 
@@ -70,21 +77,28 @@ def paste_dump():
     if not text.strip():
         return jsonify({"error": "No text provided"}), 400
 
-    users = parse_secretsdump(text)
+    source = (data.get("source") or "").strip() or "pasted text"
+    users = parse_secretsdump(text, source=source)
     if not users:
         return jsonify({"error": "No valid secretsdump entries found"}), 400
 
-    session["users"] = users
+    # Replace any existing entries from this same source, then append new ones
+    session["users"] = [u for u in session["users"] if u.get("dump_source") != source]
+    session["users"].extend(users)
     if not session["metadata"]["created"]:
         session["metadata"]["created"] = datetime.now().isoformat()
-    session["metadata"]["dump_sources"] = ["pasted text"]
+    # Rebuild dump_sources from actual data so it stays in sync
+    session["metadata"]["dump_sources"] = sorted({
+        u["dump_source"] for u in session["users"] if u.get("dump_source")
+    })
     apply_passwords()
     save_session()
 
     total    = len([u for u in users if not u["is_history"] and not u["is_machine"]])
     machines = len([u for u in users if not u["is_history"] and u["is_machine"]])
     hist     = len([u for u in users if u["is_history"]])
-    return jsonify({"success": True, "total": total, "machines": machines, "history": hist})
+    return jsonify({"success": True, "total": total, "machines": machines, "history": hist,
+                    "source": source})
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +171,7 @@ def get_users():
         search        = request.args.get("search", ""),
         cracked       = request.args.get("cracked", "all"),
         domain        = request.args.get("domain", "all"),
+        source        = request.args.get("source", "all"),
         show_history  = request.args.get("show_history", "false") == "true",
         show_machines = request.args.get("show_machines", "true") == "true",
         sort_by       = request.args.get("sort_by", "username"),
@@ -193,6 +208,7 @@ def get_stats():
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
     domains = sorted({u["domain"] for u in all_u if u["domain"]})
+    sources = sorted({u.get("dump_source", "") for u in all_u if u.get("dump_source")})
     rate    = round(len(cracked) / len(user_accts) * 100, 1) if user_accts else 0.0
 
     return jsonify(
@@ -205,6 +221,7 @@ def get_stats():
             "crack_rate":      rate,
             "top_passwords":   [{"password": p, "count": c} for p, c in top_pw],
             "domains":         domains,
+            "sources":         sources,
             "metadata":        session["metadata"],
         }
     )
@@ -284,13 +301,14 @@ def export_csv():
         search        = request.args.get("search", ""),
         cracked       = request.args.get("cracked", "all"),
         domain        = request.args.get("domain", "all"),
+        source        = request.args.get("source", "all"),
         show_history  = request.args.get("show_history", "false") == "true",
         show_machines = request.args.get("show_machines", "true") == "true",
     )
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
-                "Shared Count", "Machine", "History", "Hist Index"])
+                "Shared Count", "Machine", "History", "Hist Index", "Source"])
     for u in users:
         w.writerow(
             [
@@ -301,6 +319,7 @@ def export_csv():
                 "Yes" if u["is_machine"] else "No",
                 "Yes" if u["is_history"] else "No",
                 u["hist_index"] if u["hist_index"] >= 0 else "",
+                u.get("dump_source", ""),
             ]
         )
     buf.seek(0)
