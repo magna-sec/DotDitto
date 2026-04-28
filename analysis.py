@@ -76,6 +76,10 @@ def extract_prefix(password: str) -> str | None:
 # Full analysis
 # ---------------------------------------------------------------------------
 
+# Matches 4-digit years commonly appended to AD passwords (1970–2030)
+_YEAR_RE = re.compile(r"(?:19[789]\d|20[012]\d|2030)")
+
+
 def run_analysis(cracked_passwords: list[str]) -> dict:
     """Compute all analysis metrics for a list of plaintext passwords.
 
@@ -91,6 +95,15 @@ def run_analysis(cracked_passwords: list[str]) -> dict:
             "top_words": [],
             "top_prefixes": [],
             "complexity": {},
+            "reuse": {
+                "unique_passwords": 0,
+                "reused_password_count": 0,
+                "reused_user_count": 0,
+                "max_reuse": 0,
+                "reuse_pct": 0.0,
+                "unique_pct": 0.0,
+            },
+            "year_pct": 0.0,
         }
 
     total = len(cracked_passwords)
@@ -203,6 +216,28 @@ def run_analysis(cracked_passwords: list[str]) -> dict:
     complexity["min_length"]    = sorted_lengths[0]
     complexity["max_length"]    = sorted_lengths[-1]
 
+    # ── Reuse / uniqueness ──────────────────────────────────────────────────
+    pw_counter: Counter = Counter(cracked_passwords)
+    unique_pws    = len(pw_counter)
+    # Passwords (not users) that appear more than once
+    reused_pw_ct  = sum(1 for c in pw_counter.values() if c > 1)
+    # Users whose password is shared with at least one other account
+    reused_usr_ct = sum(c for c in pw_counter.values() if c > 1)
+    max_reuse     = pw_counter.most_common(1)[0][1] if pw_counter else 0
+
+    reuse = {
+        "unique_passwords":    unique_pws,
+        "reused_password_count": reused_pw_ct,
+        "reused_user_count":   reused_usr_ct,
+        "max_reuse":           max_reuse,
+        "reuse_pct":   round(reused_usr_ct / total * 100, 1) if total else 0.0,
+        "unique_pct":  round(unique_pws    / total * 100, 1) if total else 0.0,
+    }
+
+    # ── Year patterns ───────────────────────────────────────────────────────
+    year_count = sum(1 for pw in cracked_passwords if _YEAR_RE.search(pw))
+    year_pct   = round(year_count / total * 100, 1) if total else 0.0
+
     return {
         "total":        total,
         "unique_masks": len(mask_map),
@@ -212,6 +247,8 @@ def run_analysis(cracked_passwords: list[str]) -> dict:
         "top_words":    top_words,
         "top_prefixes": top_prefixes,
         "complexity":   complexity,
+        "reuse":        reuse,
+        "year_pct":     year_pct,
     }
 
 

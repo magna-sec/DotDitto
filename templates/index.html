@@ -411,8 +411,9 @@
     /* Length distribution */
     .len-section-lbl {
       font-size: 11px; color: var(--text-muted); text-transform: uppercase;
-      letter-spacing: .06em; margin-bottom: 8px;
+      letter-spacing: .06em; margin-bottom: 8px; margin-top: 18px;
     }
+    .len-section-lbl:first-child { margin-top: 0; }
     .length-chart {
       display: flex; align-items: flex-end; gap: 4px;
       height: 52px; margin-bottom: 18px; padding-bottom: 2px;
@@ -517,6 +518,37 @@
     .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
     .tab-panel.hidden { display: none !important; }
 
+    /* ── Analysis filter toolbar ────────────────────────────────────── */
+    .analysis-toolbar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .analysis-toolbar select {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 6px; color: var(--text); padding: 6px 10px; cursor: pointer;
+    }
+    .analysis-toolbar select:focus { outline: none; border-color: var(--blue); }
+    .analysis-scope-info {
+      font-size: 12px; color: var(--blue); margin-left: 2px;
+    }
+
+    /* ── Reuse stat pills ────────────────────────────────────────────── */
+    .reuse-row {
+      display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .reuse-pill {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 16px; flex: 1 1 140px;
+    }
+    .reuse-pill .rp-val {
+      font-size: 22px; font-weight: 700; line-height: 1; margin-bottom: 3px;
+    }
+    .reuse-pill .rp-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+    .reuse-pill.red   .rp-val { color: var(--red); }
+    .reuse-pill.blue  .rp-val { color: var(--blue); }
+    .reuse-pill.yellow .rp-val { color: var(--yellow); }
+    .reuse-pill.green .rp-val { color: var(--green); }
+
     /* ── Hash cells (All Hashes tab) ────────────────────────────────── */
     .hash-cell { display: flex; align-items: center; gap: 5px; }
     .hash-truncated {
@@ -532,6 +564,131 @@
     }
     tr:hover .hash-copy-btn { opacity: 1; }
     .hash-copy-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+
+    /* ── Domain Manager Panel ───────────────────────────────────────────── */
+    .domain-panel {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 14px; min-width: 280px; max-width: 360px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 500;
+      max-height: 420px; overflow-y: auto;
+    }
+    .domain-panel-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    .domain-panel-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+    .domain-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,.4);
+    }
+    .domain-row:last-child { border-bottom: none; }
+    .domain-row-name {
+      font-family: var(--font-mono); font-size: 12px; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .domain-row-name.is-hidden { color: var(--text-muted); text-decoration: line-through; opacity: .55; }
+    .btn.active-filter { border-color: var(--yellow); color: var(--yellow); }
+    .btn.active-filter:hover { background: var(--yellow-dim); }
+
+    /* ── Client Mode ─────────────────────────────────────────────────────── */
+    .client-btn-group { display: flex; }
+    .client-btn-group .btn.client-btn { border-radius: 6px 0 0 6px; border-right: none; }
+    .btn.client-btn { border-color: var(--purple); color: var(--purple); }
+    .btn.client-btn:hover { background: var(--purple-dim); }
+    .btn.client-btn.active { background: var(--purple); color: #0d1117; font-weight: 600; border-color: var(--purple); }
+    .btn.client-chevron {
+      border-color: var(--purple); color: var(--purple);
+      padding: 6px 8px; border-radius: 0 6px 6px 0;
+    }
+    .btn.client-chevron:hover { background: var(--purple-dim); }
+    .btn.client-chevron.active { background: var(--purple); color: #0d1117; border-color: var(--purple); }
+
+    body.client-mode.hide-credentials .pw-cracked,
+    body.client-mode.hide-credentials .pw-bar-label,
+    body.client-mode.hide-credentials .hash-text,
+    body.client-mode.hide-credentials .hash-truncated,
+    body.client-mode.hide-credentials .mask-example,
+    body.client-mode.hide-credentials .hf-val:not(.unknown) {
+      filter: blur(7px);
+      user-select: none;
+      pointer-events: none;
+    }
+    body.client-mode.hide-usernames .username-text,
+    body.client-mode.hide-usernames #hist-modal-title {
+      filter: blur(7px);
+      user-select: none;
+      pointer-events: none;
+    }
+    body.client-mode .copy-btn,
+    body.client-mode .hash-copy-btn,
+    body.client-mode .hf-copy,
+    body.client-mode .client-hide { display: none !important; }
+
+    .client-mode-banner {
+      display: none; background: var(--purple-dim);
+      border: 1px solid rgba(210,168,255,.3); border-radius: 7px;
+      padding: 10px 16px; margin-bottom: 16px;
+      color: var(--purple); font-size: 13px; text-align: center; font-weight: 500;
+    }
+    body.client-mode .client-mode-banner { display: block; }
+
+    .client-opts-panel {
+      position: absolute; top: calc(100% + 6px); right: 0; z-index: 500;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 12px 14px; min-width: 190px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    .client-opts-panel.hidden { display: none; }
+    .client-opts-title {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px;
+    }
+    .client-opt-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; cursor: pointer; user-select: none; font-size: 13px;
+    }
+    .client-opt-row:hover { color: var(--purple); }
+    .client-opt-row input { cursor: pointer; width: 14px; height: 14px; accent-color: var(--purple); }
+
+    /* ── Domain Comparison ───────────────────────────────────────────────── */
+    .compare-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 18px; margin-bottom: 20px;
+    }
+    .compare-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .compare-hdr h3 { font-size: 13px; font-weight: 600; }
+    .compare-hint { font-size: 11px; color: var(--text-muted); }
+    .domain-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .domain-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 12px; border-radius: 20px; font-size: 12px;
+      border: 1px solid var(--border2); background: var(--surface2);
+      color: var(--text-muted); cursor: pointer; transition: all .15s; user-select: none;
+    }
+    .domain-chip:hover { border-color: var(--blue); color: var(--blue); }
+    .domain-chip.selected { border-color: var(--blue); background: var(--blue-dim); color: var(--blue); font-weight: 600; }
+    .compare-grid { display: grid; gap: 12px; margin-top: 14px; }
+    .compare-domain-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 14px 16px; min-width: 0;
+    }
+    .compare-domain-name {
+      font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+      color: var(--blue); margin-bottom: 10px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .compare-stats-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
+    .compare-stat {
+      text-align: center; padding: 7px 4px;
+      background: var(--surface3); border-radius: 5px;
+    }
+    .compare-stat .cs-val { font-size: 17px; font-weight: 700; line-height: 1; }
+    .compare-stat .cs-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+    .compare-stat.blue   .cs-val { color: var(--blue); }
+    .compare-stat.green  .cs-val { color: var(--green); }
+    .compare-stat.red    .cs-val { color: var(--red); }
+    .compare-stat.yellow .cs-val { color: var(--yellow); }
   </style>
 </head>
 <body>
@@ -539,15 +696,20 @@
 <!-- ─── Toast container ──────────────────────────────────────────────────── -->
 <div id="toasts"></div>
 
-<!-- ─── Paste modal ──────────────────────────────────────────────────────── -->
+<!-- ─── Paste / label modal ───────────────────────────────────────────────── -->
 <div id="modal-overlay" class="hidden" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <h3 id="modal-title">Paste text</h3>
+    <!-- File-upload mode: shows the filename, hides textarea -->
+    <div id="modal-file-row" style="display:none;margin-bottom:10px;">
+      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">File</label>
+      <div id="modal-file-name" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted);padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;word-break:break-all;"></div>
+    </div>
     <div id="modal-source-row" style="display:none;margin-bottom:10px;">
-      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Source name (ntds.dit label)</label>
+      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Source label (DC / host name)</label>
       <input type="text" id="modal-source-input"
              style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;"
-             placeholder="e.g. DC01, corp-domain.dit">
+             placeholder="e.g. DC01, corp-dc.domain.local">
     </div>
     <textarea id="modal-textarea" spellcheck="false" placeholder=""></textarea>
     <div class="modal-actions">
@@ -590,6 +752,35 @@
   </div>
 
   <div class="header-actions">
+    <div style="position:relative">
+      <div class="client-btn-group">
+        <button class="btn sm client-btn" id="btn-client-mode" onclick="toggleClientMode()" title="Toggle client-facing mode">Client Mode</button>
+        <button class="btn sm client-chevron" id="btn-client-opts" onclick="toggleClientOptsPanel(event)" title="Client Mode options">▾</button>
+      </div>
+      <div class="client-opts-panel hidden" id="client-opts-panel">
+        <div class="client-opts-title">Hide from view</div>
+        <label class="client-opt-row">
+          <input type="checkbox" id="opt-hide-credentials" onchange="clientOptChanged()">
+          Passwords &amp; hashes
+        </label>
+        <label class="client-opt-row">
+          <input type="checkbox" id="opt-hide-usernames" onchange="clientOptChanged()">
+          Usernames
+        </label>
+      </div>
+    </div>
+    <div style="position:relative">
+      <button class="btn sm" id="btn-domain-mgr" onclick="toggleDomainPanel(event)" disabled title="Show/hide individual domains from all stats">Domains ▾</button>
+      <div id="domain-manager-panel" class="domain-panel hidden">
+        <div class="domain-panel-hdr">
+          <span class="domain-panel-title">Domain Visibility</span>
+          <button class="btn sm" onclick="domainMgrShowAll()">Show All</button>
+        </div>
+        <div id="domain-panel-list">
+          <div style="color:var(--text-muted);font-size:12px;padding:6px 0;">No domains loaded</div>
+        </div>
+      </div>
+    </div>
     <label class="btn sm" style="cursor:pointer">
       Import JSON
       <input type="file" id="import-json-input" accept=".json">
@@ -661,6 +852,8 @@
   <!-- ─── Tab: Overview ────────────────────────────────────────────────────── -->
   <div id="tab-overview" class="tab-panel hidden">
 
+    <div class="client-mode-banner">Passwords and hashes are hidden — Client Mode active</div>
+
     <!-- Stats strip -->
     <div class="stats-grid" id="stats-section">
       <div class="stat-card blue">
@@ -683,6 +876,16 @@
         <div class="label">Crack Rate</div>
         <div class="value" id="stat-rate">0%</div>
       </div>
+    </div>
+
+    <!-- Domain comparison -->
+    <div class="compare-section hidden" id="compare-section">
+      <div class="compare-hdr">
+        <h3>Domain Comparison</h3>
+        <span class="compare-hint">Select domains to compare side by side</span>
+      </div>
+      <div class="domain-chips" id="domain-chips"></div>
+      <div id="compare-grid-wrap"></div>
     </div>
 
     <!-- Top passwords chart -->
@@ -730,10 +933,10 @@
         </select>
 
         <div class="toolbar-right">
-          <button class="btn sm" onclick="copyUncracked()" title="Copy all unique uncracked NT hashes to clipboard">
+          <button class="btn sm client-hide" onclick="copyUncracked()" title="Copy all unique uncracked NT hashes to clipboard">
             Copy Uncracked Hashes
           </button>
-          <button class="btn sm" onclick="exportWordlist()" id="btn-wordlist" title="Download all unique cracked passwords as a wordlist" disabled>
+          <button class="btn sm client-hide" onclick="exportWordlist()" id="btn-wordlist" title="Download all unique cracked passwords as a wordlist" disabled>
             Export Wordlist
           </button>
           <button class="btn sm" onclick="exportCSV()">Export CSV</button>
@@ -840,8 +1043,19 @@
       No cracked passwords yet — load a hashcat pot file to enable analysis.
     </div>
 
-    <!-- ── Complexity & length stats ── -->
+    <!-- ── Stats section (hidden until data) ── -->
     <div id="analysis-stats-section" class="hidden">
+
+      <!-- Filter toolbar — inside stats section so it only shows with data -->
+      <div class="analysis-toolbar">
+        <select id="analysis-filter-domain" onchange="analysisFilterChanged()">
+          <option value="all">All domains</option>
+        </select>
+        <select id="analysis-filter-source" onchange="analysisFilterChanged()">
+          <option value="all">All sources</option>
+        </select>
+        <span class="analysis-scope-info" id="analysis-scope-info"></span>
+      </div>
 
       <div class="analysis-card">
         <div class="analysis-hdr">
@@ -850,8 +1064,8 @@
             <div class="analysis-meta" id="analysis-meta"></div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn sm" onclick="exportWordlist()" title="Download all cracked passwords as a wordlist">Export Wordlist</button>
-            <button class="btn sm" onclick="exportWordWordlist()" title="Download most-used word tokens as a wordlist">Export Word List</button>
+            <button class="btn sm client-hide" onclick="exportWordlist()" title="Download all cracked passwords as a wordlist">Export Wordlist</button>
+            <button class="btn sm client-hide" onclick="exportWordWordlist()" title="Download most-used word tokens as a wordlist">Export Word List</button>
           </div>
         </div>
 
@@ -859,8 +1073,12 @@
         <div class="len-section-lbl">Character Classes (% of cracked passwords containing each class)</div>
         <div class="cc-row" id="cc-row"></div>
 
+        <!-- Reuse / uniqueness -->
+        <div class="len-section-lbl">Password Reuse</div>
+        <div class="reuse-row" id="reuse-row"></div>
+
         <!-- Complexity breakdown -->
-        <div class="len-section-lbl" style="margin-top:4px;">Complexity (number of character classes used)</div>
+        <div class="len-section-lbl">Complexity (number of character classes used)</div>
         <div class="complexity-grid" id="complexity-grid"></div>
 
         <!-- Length metrics -->
@@ -980,12 +1198,22 @@ function toast(msg, type = 'info', duration = 3500) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Modal (paste)
+   Modal (paste + file-label)
 ══════════════════════════════════════════════════════════════════════════ */
 let _modalMode = null;
+let _pendingDumpFile = null;
+
+function _resetModal() {
+  document.getElementById('modal-file-row').style.display   = 'none';
+  document.getElementById('modal-source-row').style.display = 'none';
+  document.getElementById('modal-textarea').style.display   = '';
+  // _pendingDumpFile is NOT cleared here — managed explicitly per call-site
+}
 
 function openModal(mode) {
+  _pendingDumpFile = null;
   _modalMode = mode;
+  _resetModal();
   document.getElementById('modal-title').textContent =
     mode === 'dump' ? 'Paste secretsdump output' : 'Paste hashcat pot file contents';
   document.getElementById('modal-textarea').value = '';
@@ -993,36 +1221,66 @@ function openModal(mode) {
     mode === 'dump'
       ? 'DOMAIN\\username:RID:LMHash:NTHash:::\n...'
       : 'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...';
-  // Show source name input only for dump pastes
-  const srcRow = document.getElementById('modal-source-row');
-  const srcInput = document.getElementById('modal-source-input');
   if (mode === 'dump') {
-    srcRow.style.display = 'block';
-    srcInput.value = '';
-  } else {
-    srcRow.style.display = 'none';
+    document.getElementById('modal-source-row').style.display = 'block';
+    document.getElementById('modal-source-input').value = '';
   }
   document.getElementById('modal-overlay').classList.remove('hidden');
   setTimeout(() => document.getElementById('modal-textarea').focus(), 50);
 }
 
+/* Called when a dump file is dropped/browsed — shows label prompt in same modal */
+function openLabelModal(file) {
+  _modalMode = 'dump-file';
+  _resetModal();
+  _pendingDumpFile = file;   // set AFTER _resetModal so it isn't cleared
+  document.getElementById('modal-title').textContent = 'Label this source';
+  document.getElementById('modal-file-row').style.display = 'block';
+  document.getElementById('modal-file-name').textContent  = file.name;
+  document.getElementById('modal-source-row').style.display = 'block';
+  document.getElementById('modal-textarea').style.display  = 'none';
+  const srcInput = document.getElementById('modal-source-input');
+  srcInput.value = file.name;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  setTimeout(() => { srcInput.focus(); srcInput.select(); }, 50);
+}
+
+document.getElementById('modal-source-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && _modalMode === 'dump-file') submitModal();
+});
+
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').classList.add('hidden');
+  _resetModal();
+  _pendingDumpFile = null;
+  _modalMode = null;
 }
 
 async function submitModal() {
+  if (_modalMode === 'dump-file') {
+    const label = document.getElementById('modal-source-input').value.trim();
+    const file  = _pendingDumpFile;
+    _pendingDumpFile = null;
+    document.getElementById('modal-overlay').classList.add('hidden');
+    _resetModal();
+    _modalMode = null;
+    if (file) await _uploadDumpFile(file, label || file.name);
+    return;
+  }
   const text = document.getElementById('modal-textarea').value.trim();
   if (!text) { toast('Nothing to load', 'error'); return; }
   const source = (_modalMode === 'dump')
     ? (document.getElementById('modal-source-input').value.trim() || '')
     : '';
   document.getElementById('modal-overlay').classList.add('hidden');
+  _resetModal();
   if (_modalMode === 'dump') {
     await loadPasteDump(text, source);
   } else {
     await loadPastePot(text);
   }
+  _modalMode = null;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1056,12 +1314,17 @@ document.getElementById('dump-file-input').addEventListener('change', e => {
   e.target.value = '';
 });
 
-async function loadFileDump(file) {
+function loadFileDump(file) {
+  openLabelModal(file);
+}
+
+async function _uploadDumpFile(file, label) {
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('label', label);
   try {
     const res = await api('POST', '/api/upload/dump', fd);
-    toast(`Loaded ${res.total} user accounts from ${res.source}`, 'success');
+    toast(`Loaded ${res.total} user accounts — source: ${res.source}`, 'success');
     await refresh(true);
   } catch (err) {
     toast(`Dump error: ${err.message}`, 'error', 5000);
@@ -1173,7 +1436,7 @@ function exportJSON() {
 }
 
 function exportCSV() {
-  const p = new URLSearchParams({ ...state.lastParams, show_history: false });
+  const p = new URLSearchParams({ ...state.lastParams, ...excludeParam(), show_history: false });
   window.location.href = `/api/export/csv?${p}`;
 }
 
@@ -1192,7 +1455,8 @@ function exportWordWordlist() {
 ══════════════════════════════════════════════════════════════════════════ */
 async function copyUncracked() {
   try {
-    const res = await api('GET', '/api/uncracked-hashes');
+    const qs = new URLSearchParams(excludeParam());
+    const res = await api('GET', `/api/uncracked-hashes${qs.toString() ? '?' + qs : ''}`);
     if (res.count === 0) { toast('No uncracked hashes', 'info'); return; }
     const text = res.hashes.join('\n');
     await navigator.clipboard.writeText(text).catch(() => {
@@ -1239,6 +1503,7 @@ function filterChanged() {
   state.source       = document.getElementById('filter-source').value;
   state.showMachines = document.getElementById('chk-machines').checked;
   state.page = 1;
+  loadStats();   // re-renders stat cards with new domain/source scope
   loadUsers();
 }
 
@@ -1266,6 +1531,7 @@ function nextPage() { if (state.page < state.totalPages) { state.page++; loadUse
 ══════════════════════════════════════════════════════════════════════════ */
 async function refresh(resetPage = false) {
   if (resetPage) state.page = 1;
+  compareState.cache = {};
   const tasks = [loadStats(), loadUsers(), loadAnalysis()];
   if (_activeTab === 'hashes') tasks.push(loadHashesTab());
   await Promise.all(tasks);
@@ -1274,7 +1540,8 @@ async function refresh(resetPage = false) {
 
 async function loadStats() {
   try {
-    const stats = await api('GET', '/api/stats');
+    const params = new URLSearchParams({ domain: state.domain, source: state.source, ...excludeParam() });
+    const stats = await api('GET', `/api/stats?${params}`);
     state.hasDump = stats.total_users > 0 || stats.machine_accounts > 0;
     renderStats(stats);
     renderTopPasswords(stats.top_passwords);
@@ -1297,6 +1564,7 @@ async function loadUsers() {
     show_machines: state.showMachines,
     sort_by:      state.sortCol,
     sort_dir:     state.sortDir,
+    ...excludeParam(),
   };
   state.lastParams = params;
   try {
@@ -1358,22 +1626,27 @@ function renderTopPasswords(list) {
 }
 
 function buildDomainFilter(domains) {
-  ['filter-domain', 'hash-filter-domain'].forEach(selId => {
+  _allDomains = domains;
+  const visible = domains.filter(d => !hiddenDomains.has(d));
+  ['filter-domain', 'hash-filter-domain', 'analysis-filter-domain'].forEach(selId => {
     const sel = document.getElementById(selId);
     if (!sel) return;
     const cur = sel.value;
+    if (cur !== 'all' && hiddenDomains.has(cur)) sel.value = 'all';
     sel.innerHTML = '<option value="all">All domains</option>';
-    for (const d of domains) {
+    for (const d of visible) {
       const opt = document.createElement('option');
       opt.value = d; opt.textContent = d;
       if (d === cur) opt.selected = true;
       sel.appendChild(opt);
     }
   });
+  buildCompareChips(visible);
+  updateDomainMgrBtn();
 }
 
 function buildSourceFilter(sources) {
-  ['filter-source', 'hash-filter-source'].forEach(selId => {
+  ['filter-source', 'hash-filter-source', 'analysis-filter-source'].forEach(selId => {
     const sel = document.getElementById(selId);
     if (!sel) return;
     const cur = sel.value;
@@ -1381,13 +1654,12 @@ function buildSourceFilter(sources) {
     for (const s of sources) {
       const opt = document.createElement('option');
       opt.value = s;
-      // Truncate long filenames in the dropdown label
       opt.textContent = s.length > 40 ? s.slice(0, 37) + '…' : s;
       opt.title = s;
       if (s === cur) opt.selected = true;
       sel.appendChild(opt);
     }
-    // Hide the dropdown when only one source (nothing to filter by)
+    // Hide when only one source (nothing to filter by)
     sel.style.display = sources.length <= 1 ? 'none' : '';
   });
 }
@@ -1409,9 +1681,18 @@ function updateDumpStatusFromStats(stats) {
 ══════════════════════════════════════════════════════════════════════════ */
 let _analysisData = null;
 
+const analysisState = { domain: 'all', source: 'all' };
+
+function analysisFilterChanged() {
+  analysisState.domain = document.getElementById('analysis-filter-domain').value;
+  analysisState.source = document.getElementById('analysis-filter-source').value;
+  loadAnalysis();
+}
+
 async function loadAnalysis() {
   try {
-    const data = await api('GET', '/api/analysis');
+    const params = new URLSearchParams({ domain: analysisState.domain, source: analysisState.source, ...excludeParam() });
+    const data = await api('GET', `/api/analysis?${params}`);
     _analysisData = data;
     renderAnalysis(data);
   } catch (err) {
@@ -1432,8 +1713,18 @@ function renderAnalysis(data) {
   empty.classList.add('hidden');
   section.classList.remove('hidden');
 
+  // Scope label (domain / source filter active)
+  const scopeParts = [];
+  if (analysisState.domain !== 'all') scopeParts.push(`domain: ${analysisState.domain}`);
+  if (analysisState.source !== 'all') scopeParts.push(`source: ${analysisState.source}`);
+  document.getElementById('analysis-scope-info').textContent =
+    scopeParts.length ? `Scoped to ${scopeParts.join(', ')}` : '';
+
+  const crackRatePart = data.total_scope != null
+    ? `  ·  ${data.crack_rate}% crack rate (${data.total.toLocaleString()} / ${data.total_scope.toLocaleString()})`
+    : '';
   document.getElementById('analysis-meta').textContent =
-    `${data.total.toLocaleString()} cracked passwords  ·  ${data.unique_masks.toLocaleString()} unique mask patterns`;
+    `${data.total.toLocaleString()} cracked passwords${crackRatePart}  ·  ${data.unique_masks.toLocaleString()} unique mask patterns`;
 
   document.getElementById('masks-meta').textContent =
     `Top ${data.masks.length} of ${data.unique_masks.toLocaleString()} unique patterns`;
@@ -1450,6 +1741,21 @@ function renderAnalysis(data) {
       <span class="cc-pct">${val ?? 0}%</span>
       <span style="color:var(--text-muted)">${label}</span>
     </span>`
+  ).join('');
+
+  /* ── Reuse pills ── */
+  const ru = data.reuse || {};
+  const yearPct = data.year_pct ?? 0;
+  document.getElementById('reuse-row').innerHTML = [
+    { cls: 'blue',   val: (ru.unique_passwords  || 0).toLocaleString(), lbl: 'Unique passwords' },
+    { cls: 'red',    val: (ru.reuse_pct         || 0) + '%',            lbl: 'Users sharing a password' },
+    { cls: 'yellow', val: (ru.max_reuse          || 0).toLocaleString(), lbl: 'Max users on one password' },
+    { cls: 'green',  val: yearPct + '%',                                  lbl: 'Contain a year (1970–2030)' },
+  ].map(({ cls, val, lbl }) =>
+    `<div class="reuse-pill ${cls}">
+      <div class="rp-val">${val}</div>
+      <div class="rp-lbl">${lbl}</div>
+    </div>`
   ).join('');
 
   /* ── Complexity cards ── */
@@ -1641,6 +1947,7 @@ async function loadHashesTab() {
     show_machines: hashState.showMachines,
     sort_by:       hashState.sortCol,
     sort_dir:      hashState.sortDir,
+    ...excludeParam(),
   };
   try {
     const qs = new URLSearchParams(params);
@@ -1666,7 +1973,7 @@ function renderHashesTable(users) {
     const srcLabel   = u.dump_source || '—';
     const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
     return `<tr class="${u.is_machine ? 'row-machine' : ''}">
-      <td class="mono">${esc(u.username)}</td>
+      <td class="mono"><span class="username-text">${esc(u.username)}</span></td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td>${hashCol(u.nt_hash)}</td>
       <td>${hashCol(u.aes256)}</td>
@@ -1759,7 +2066,7 @@ function renderTable(users) {
     const srcLabel = u.dump_source || '—';
     const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
     rows.push(`<tr class="${hasHist ? 'row-has-history' : (u.is_machine ? 'row-machine' : '')}" ${click}>
-      <td class="mono">${esc(u.username)}</td>
+      <td class="mono"><span class="username-text">${esc(u.username)}</span></td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
       <td>${hashCell(u.nt_hash)}</td>
@@ -1958,6 +2265,8 @@ function updateHeaderBtns() {
   document.getElementById('btn-clear').disabled       = !hasDump;
   const wlBtn = document.getElementById('btn-wordlist');
   if (wlBtn) wlBtn.disabled = !(hasDump && hasPot);
+  const dmgrBtn = document.getElementById('btn-domain-mgr');
+  if (dmgrBtn) dmgrBtn.disabled = !hasDump;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1973,9 +2282,231 @@ function esc(str) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Domain Manager
+══════════════════════════════════════════════════════════════════════════ */
+let _allDomains = [];
+const hiddenDomains = new Set(JSON.parse(localStorage.getItem('hiddenDomains') || '[]'));
+
+function excludeParam() {
+  return hiddenDomains.size ? { exclude_domains: [...hiddenDomains].join(',') } : {};
+}
+
+function saveHiddenDomains() {
+  localStorage.setItem('hiddenDomains', JSON.stringify([...hiddenDomains]));
+}
+
+function toggleDomainPanel(e) {
+  if (e) e.stopPropagation();
+  const panel = document.getElementById('domain-manager-panel');
+  const isOpen = !panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', isOpen);
+  if (!isOpen) renderDomainPanel();
+}
+
+function renderDomainPanel() {
+  const list = document.getElementById('domain-panel-list');
+  if (!list) return;
+  if (_allDomains.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">No domains loaded</div>';
+    return;
+  }
+  list.innerHTML = _allDomains.map(d => {
+    const hidden = hiddenDomains.has(d);
+    return `<div class="domain-row">
+      <span class="domain-row-name${hidden ? ' is-hidden' : ''}" title="${esc(d)}">${esc(d)}</span>
+      <button class="btn sm${hidden ? '' : ' danger'}" style="padding:2px 10px;font-size:11px" onclick="toggleDomainHide('${esc(d).replace(/'/g,'\\\'')}')">${hidden ? 'Show' : 'Hide'}</button>
+    </div>`;
+  }).join('');
+}
+
+function toggleDomainHide(domain) {
+  if (hiddenDomains.has(domain)) {
+    hiddenDomains.delete(domain);
+  } else {
+    hiddenDomains.add(domain);
+    // Close the panel-level filter if that domain was selected
+    ['filter-domain','hash-filter-domain','analysis-filter-domain'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (sel && sel.value === domain) sel.value = 'all';
+    });
+  }
+  saveHiddenDomains();
+  renderDomainPanel();
+  updateDomainMgrBtn();
+  refresh(true);
+}
+
+function domainMgrShowAll() {
+  hiddenDomains.clear();
+  saveHiddenDomains();
+  renderDomainPanel();
+  updateDomainMgrBtn();
+  refresh(true);
+}
+
+function updateDomainMgrBtn() {
+  const btn = document.getElementById('btn-domain-mgr');
+  if (!btn) return;
+  const n = hiddenDomains.size;
+  btn.textContent = n > 0 ? `Domains (${n} hidden) ▾` : 'Domains ▾';
+  btn.classList.toggle('active-filter', n > 0);
+}
+
+/* Close domain panel on outside click */
+document.addEventListener('click', e => {
+  const panel = document.getElementById('domain-manager-panel');
+  const btn   = document.getElementById('btn-domain-mgr');
+  if (panel && !panel.classList.contains('hidden') &&
+      !panel.contains(e.target) && e.target !== btn) {
+    panel.classList.add('hidden');
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Client Mode
+══════════════════════════════════════════════════════════════════════════ */
+let _clientMode        = localStorage.getItem('clientMode') === '1';
+let _hideCredentials   = localStorage.getItem('clientHideCredentials') !== '0'; // default true
+let _hideUsernames     = localStorage.getItem('clientHideUsernames')   === '1'; // default false
+
+function toggleClientMode() {
+  _clientMode = !_clientMode;
+  localStorage.setItem('clientMode', _clientMode ? '1' : '0');
+  applyClientMode();
+}
+
+function toggleClientOptsPanel(e) {
+  e.stopPropagation();
+  const panel = document.getElementById('client-opts-panel');
+  if (panel) panel.classList.toggle('hidden');
+}
+
+function clientOptChanged() {
+  _hideCredentials = document.getElementById('opt-hide-credentials').checked;
+  _hideUsernames   = document.getElementById('opt-hide-usernames').checked;
+  localStorage.setItem('clientHideCredentials', _hideCredentials ? '1' : '0');
+  localStorage.setItem('clientHideUsernames',   _hideUsernames   ? '1' : '0');
+  applyClientMode();
+}
+
+function applyClientMode() {
+  document.body.classList.toggle('client-mode',       _clientMode);
+  document.body.classList.toggle('hide-credentials',  _clientMode && _hideCredentials);
+  document.body.classList.toggle('hide-usernames',    _clientMode && _hideUsernames);
+
+  const btn = document.getElementById('btn-client-mode');
+  if (btn) {
+    btn.classList.toggle('active', _clientMode);
+    btn.textContent = _clientMode ? 'Exit Client Mode' : 'Client Mode';
+  }
+  const chevron = document.getElementById('btn-client-opts');
+  if (chevron) chevron.classList.toggle('active', _clientMode);
+
+  const cbCreds = document.getElementById('opt-hide-credentials');
+  const cbUsers = document.getElementById('opt-hide-usernames');
+  if (cbCreds) cbCreds.checked = _hideCredentials;
+  if (cbUsers) cbUsers.checked = _hideUsernames;
+
+  const banner = document.querySelector('.client-mode-banner');
+  if (banner) {
+    const parts = [];
+    if (_hideCredentials) parts.push('passwords and hashes');
+    if (_hideUsernames)   parts.push('usernames');
+    banner.textContent = parts.length
+      ? parts.join(' and ') + ' are hidden — Client Mode active'
+      : 'Client Mode active';
+  }
+}
+
+document.addEventListener('click', e => {
+  const panel = document.getElementById('client-opts-panel');
+  const wrap  = document.getElementById('btn-client-opts');
+  if (panel && !panel.classList.contains('hidden') &&
+      !panel.contains(e.target) && e.target !== wrap) {
+    panel.classList.add('hidden');
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Domain Comparison
+══════════════════════════════════════════════════════════════════════════ */
+const compareState = { selected: new Set(), cache: {} };
+
+function buildCompareChips(domains) {
+  const section = document.getElementById('compare-section');
+  const chipsEl = document.getElementById('domain-chips');
+  if (!section || !chipsEl) return;
+
+  if (!domains || domains.length < 2) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  for (const d of [...compareState.selected]) {
+    if (!domains.includes(d)) compareState.selected.delete(d);
+  }
+
+  chipsEl.innerHTML = domains.map(d =>
+    `<span class="domain-chip${compareState.selected.has(d) ? ' selected' : ''}" data-domain="${esc(d)}" onclick="toggleDomainChip(this)">${esc(d)}</span>`
+  ).join('');
+
+  renderDomainComparison();
+}
+
+function toggleDomainChip(el) {
+  const d = el.getAttribute('data-domain');
+  if (compareState.selected.has(d)) {
+    compareState.selected.delete(d);
+  } else {
+    compareState.selected.add(d);
+  }
+  document.querySelectorAll('.domain-chip').forEach(chip => {
+    chip.classList.toggle('selected', compareState.selected.has(chip.getAttribute('data-domain')));
+  });
+  renderDomainComparison();
+}
+
+async function renderDomainComparison() {
+  const wrap = document.getElementById('compare-grid-wrap');
+  if (!wrap) return;
+  const selected = [...compareState.selected];
+
+  if (selected.length === 0) { wrap.innerHTML = ''; return; }
+
+  wrap.innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin-top:10px;">Loading…</div>';
+  try {
+    const results = await Promise.all(selected.map(async d => {
+      if (!compareState.cache[d]) {
+        const params = new URLSearchParams({ domain: d });
+        compareState.cache[d] = await api('GET', `/api/stats?${params}`);
+      }
+      return { domain: d, s: compareState.cache[d] };
+    }));
+    const cols = Math.min(selected.length, 4);
+    wrap.innerHTML = `<div class="compare-grid" style="grid-template-columns:repeat(${cols},1fr)">
+      ${results.map(({ domain, s }) => `
+        <div class="compare-domain-card">
+          <div class="compare-domain-name" title="${esc(domain)}">${esc(domain)}</div>
+          <div class="compare-stats-row">
+            <div class="compare-stat blue"><div class="cs-val">${s.total_users.toLocaleString()}</div><div class="cs-lbl">Users</div></div>
+            <div class="compare-stat"><div class="cs-val">${s.machine_accounts.toLocaleString()}</div><div class="cs-lbl">Machines</div></div>
+            <div class="compare-stat green"><div class="cs-val">${s.cracked.toLocaleString()}</div><div class="cs-lbl">Cracked</div></div>
+            <div class="compare-stat red"><div class="cs-val">${s.uncracked.toLocaleString()}</div><div class="cs-lbl">Uncracked</div></div>
+            <div class="compare-stat yellow"><div class="cs-val">${s.crack_rate}%</div><div class="cs-lbl">Rate</div></div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  } catch (err) {
+    wrap.innerHTML = `<div style="color:var(--red);font-size:12px;margin-top:10px;">Error: ${esc(err.message)}</div>`;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Boot
 ══════════════════════════════════════════════════════════════════════════ */
 initSession();
+applyClientMode();
 </script>
 </body>
 </html>

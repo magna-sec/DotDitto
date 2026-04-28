@@ -43,7 +43,9 @@ def upload_dump():
     if not f:
         return jsonify({"error": "No file provided"}), 400
 
-    source = f.filename
+    # Allow caller to supply a custom label (e.g. "DC01") instead of the raw filename
+    label = (request.form.get("label") or "").strip()
+    source = label if label else f.filename
     text = f.read().decode("utf-8", errors="replace")
     users = parse_secretsdump(text, source=source)
     if not users:
@@ -166,16 +168,19 @@ def get_session_info():
 def get_users():
     page     = max(1, int(request.args.get("page", 1)))
     per_page = min(500, max(10, int(request.args.get("per_page", 100))))
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
 
     users = get_filtered_users(
-        search        = request.args.get("search", ""),
-        cracked       = request.args.get("cracked", "all"),
-        domain        = request.args.get("domain", "all"),
-        source        = request.args.get("source", "all"),
-        show_history  = request.args.get("show_history", "false") == "true",
-        show_machines = request.args.get("show_machines", "true") == "true",
-        sort_by       = request.args.get("sort_by", "username"),
-        sort_dir      = request.args.get("sort_dir", "asc"),
+        search          = request.args.get("search", ""),
+        cracked         = request.args.get("cracked", "all"),
+        domain          = request.args.get("domain", "all"),
+        source          = request.args.get("source", "all"),
+        show_history    = request.args.get("show_history", "false") == "true",
+        show_machines   = request.args.get("show_machines", "true") == "true",
+        sort_by         = request.args.get("sort_by", "username"),
+        sort_dir        = request.args.get("sort_dir", "asc"),
+        exclude_domains = excluded or None,
     )
 
     total  = len(users)
@@ -195,10 +200,27 @@ def get_users():
 
 @bp.route("/api/stats")
 def get_stats():
-    all_u      = session["users"]
-    non_hist   = [u for u in all_u if not u["is_history"]]
-    user_accts = [u for u in non_hist if not u["is_machine"]]
-    machines   = [u for u in non_hist if u["is_machine"]]
+    domain = request.args.get("domain", "all")
+    source = request.args.get("source", "all")
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+
+    all_u    = session["users"]
+    non_hist = [u for u in all_u if not u["is_history"]]
+
+    def in_scope(u: dict) -> bool:
+        if domain != "all" and u["domain"] != domain:
+            return False
+        if source != "all" and u.get("dump_source", "") != source:
+            return False
+        if excluded and u["domain"] in excluded:
+            return False
+        return True
+
+    scoped     = [u for u in non_hist if in_scope(u)]
+    user_accts = [u for u in scoped if not u["is_machine"]]
+    machines   = [u for u in scoped if u["is_machine"]]
+    # History count is always global (not filtered)
     hist_entries = [u for u in all_u if u["is_history"]]
     cracked    = [u for u in user_accts if u["password"]]
 
@@ -207,22 +229,23 @@ def get_stats():
         pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
+    # Domain/source dropdowns always show all options regardless of current filter
     domains = sorted({u["domain"] for u in all_u if u["domain"]})
     sources = sorted({u.get("dump_source", "") for u in all_u if u.get("dump_source")})
     rate    = round(len(cracked) / len(user_accts) * 100, 1) if user_accts else 0.0
 
     return jsonify(
         {
-            "total_users":     len(user_accts),
+            "total_users":      len(user_accts),
             "machine_accounts": len(machines),
-            "history_entries": len(hist_entries),
-            "cracked":         len(cracked),
-            "uncracked":       len(user_accts) - len(cracked),
-            "crack_rate":      rate,
-            "top_passwords":   [{"password": p, "count": c} for p, c in top_pw],
-            "domains":         domains,
-            "sources":         sources,
-            "metadata":        session["metadata"],
+            "history_entries":  len(hist_entries),
+            "cracked":          len(cracked),
+            "uncracked":        len(user_accts) - len(cracked),
+            "crack_rate":       rate,
+            "top_passwords":    [{"password": p, "count": c} for p, c in top_pw],
+            "domains":          domains,
+            "sources":          sources,
+            "metadata":         session["metadata"],
         }
     )
 
@@ -230,23 +253,41 @@ def get_stats():
 @bp.route("/api/analysis")
 def get_analysis():
     """Full password analysis: masks, lengths, char classes, words, prefixes, complexity."""
-    cracked_pws = [
-        u["password"]
-        for u in session["users"]
-        if u["password"] and not u["is_history"] and not u["is_machine"]
+    domain = request.args.get("domain", "all")
+    source = request.args.get("source", "all")
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+
+    scope_users = [
+        u for u in session["users"]
+        if not u["is_history"] and not u["is_machine"]
+        and (domain == "all" or u["domain"] == domain)
+        and (source == "all" or u.get("dump_source", "") == source)
+        and (not excluded or u["domain"] not in excluded)
     ]
-    return jsonify(run_analysis(cracked_pws))
+    cracked_pws  = [u["password"] for u in scope_users if u["password"]]
+    total_scope  = len(scope_users)
+    crack_rate   = round(len(cracked_pws) / total_scope * 100, 1) if total_scope else 0.0
+
+    result = run_analysis(cracked_pws)
+    result["crack_rate"]   = crack_rate
+    result["total_scope"]  = total_scope
+    return jsonify(result)
 
 
 @bp.route("/api/uncracked-hashes")
 def uncracked_hashes():
     include_machines = request.args.get("machines", "false") == "true"
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     seen:   set  = set()
     hashes: list = []
     for u in session["users"]:
         if u["is_history"] or u["password"]:
             continue
         if u["is_machine"] and not include_machines:
+            continue
+        if excluded and u["domain"] in excluded:
             continue
         h = u["nt_hash"]
         if len(h) == 32 and h not in seen:
@@ -297,13 +338,16 @@ def import_json():
 
 @bp.route("/api/export/csv")
 def export_csv():
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     users = get_filtered_users(
-        search        = request.args.get("search", ""),
-        cracked       = request.args.get("cracked", "all"),
-        domain        = request.args.get("domain", "all"),
-        source        = request.args.get("source", "all"),
-        show_history  = request.args.get("show_history", "false") == "true",
-        show_machines = request.args.get("show_machines", "true") == "true",
+        search          = request.args.get("search", ""),
+        cracked         = request.args.get("cracked", "all"),
+        domain          = request.args.get("domain", "all"),
+        source          = request.args.get("source", "all"),
+        show_history    = request.args.get("show_history", "false") == "true",
+        show_machines   = request.args.get("show_machines", "true") == "true",
+        exclude_domains = excluded or None,
     )
     buf = io.StringIO()
     w = csv.writer(buf)

@@ -127,6 +127,7 @@ def get_filtered_users(
     show_machines: bool = True,
     sort_by: str = "username",
     sort_dir: str = "asc",
+    exclude_domains: set | None = None,
 ) -> list:
     all_users = session["users"]
 
@@ -153,6 +154,8 @@ def get_filtered_users(
         if domain != "all" and u["domain"] != domain:
             return False
         if source != "all" and u.get("dump_source", "") != source:
+            return False
+        if exclude_domains and u["domain"] in exclude_domains:
             return False
         if check_cracked:
             if cracked == "cracked" and not u["password"]:

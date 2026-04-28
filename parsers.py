@@ -48,10 +48,11 @@ def parse_secretsdump(text: str, source: str = "") -> list:
 
         full_user = parts[0]
 
-        # Split optional domain prefix
+        # Split optional domain prefix — normalise to uppercase
         domain, username = "", full_user
         if "\\" in full_user:
             domain, username = full_user.split("\\", 1)
+            domain = domain.upper()
 
         # ── Kerberos hash line (parts[1] is hash type, not numeric RID) ──
         if _KERB_RE.match(parts[1]):
