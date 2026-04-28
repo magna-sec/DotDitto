@@ -899,8 +899,15 @@
 
       <!-- Toolbar -->
       <div class="toolbar">
+        <select id="search-field" onchange="searchFieldChanged()">
+          <option value="all">All fields</option>
+          <option value="username">Username</option>
+          <option value="domain">Domain</option>
+          <option value="hash">Hash</option>
+          <option value="password">Password</option>
+        </select>
         <input type="text" class="search-input" id="search-input"
-               placeholder="Search username, hash, or password…">
+               placeholder="Search all fields…">
 
         <select id="filter-cracked" onchange="filterChanged()">
           <option value="all">All entries</option>
@@ -979,8 +986,15 @@
   <div id="tab-hashes" class="tab-panel hidden">
 
     <div class="toolbar">
+      <select id="hash-search-field" onchange="hashSearchFieldChanged()">
+        <option value="all">All fields</option>
+        <option value="username">Username</option>
+        <option value="domain">Domain</option>
+        <option value="hash">Hash</option>
+        <option value="password">Password</option>
+      </select>
       <input type="text" class="search-input" id="hash-search-input"
-             placeholder="Search username, domain, or hash…">
+             placeholder="Search all fields…">
 
       <select id="hash-filter-domain" onchange="hashFilterChanged()">
         <option value="all">All domains</option>
@@ -1161,10 +1175,11 @@ const state = {
   totalRows:  0,
   sortCol:    'username',
   sortDir:    'asc',
-  search:     '',
-  cracked:    'all',
-  domain:     'all',
-  source:     'all',
+  search:      '',
+  searchField: 'all',
+  cracked:     'all',
+  domain:      'all',
+  source:      'all',
   showMachines: false,
   lastParams: {},
 };
@@ -1497,6 +1512,28 @@ document.getElementById('search-input').addEventListener('input', e => {
   }, 280);
 });
 
+const _searchFieldPlaceholders = {
+  all: 'Search all fields…',
+  username: 'Search username…',
+  domain: 'Search domain…',
+  hash: 'Search hash…',
+  password: 'Search password…',
+};
+
+function searchFieldChanged() {
+  state.searchField = document.getElementById('search-field').value;
+  document.getElementById('search-input').placeholder = _searchFieldPlaceholders[state.searchField];
+  state.page = 1;
+  loadUsers();
+}
+
+function hashSearchFieldChanged() {
+  hashState.searchField = document.getElementById('hash-search-field').value;
+  document.getElementById('hash-search-input').placeholder = _searchFieldPlaceholders[hashState.searchField];
+  hashState.page = 1;
+  loadHashesTab();
+}
+
 function filterChanged() {
   state.cracked      = document.getElementById('filter-cracked').value;
   state.domain       = document.getElementById('filter-domain').value;
@@ -1557,6 +1594,7 @@ async function loadUsers() {
     page:         state.page,
     per_page:     state.perPage,
     search:       state.search,
+    search_field: state.searchField,
     cracked:      state.cracked,
     domain:       state.domain,
     source:       state.source,
@@ -1895,7 +1933,7 @@ function switchTab(name) {
 const hashState = {
   page: 1, perPage: 100, totalPages: 1, totalRows: 0,
   sortCol: 'username', sortDir: 'asc',
-  search: '', domain: 'all', source: 'all', showMachines: false,
+  search: '', searchField: 'all', domain: 'all', source: 'all', showMachines: false,
 };
 
 let _hashSearchTimer = null;
@@ -1940,6 +1978,7 @@ async function loadHashesTab() {
     page:          hashState.page,
     per_page:      hashState.perPage,
     search:        hashState.search,
+    search_field:  hashState.searchField,
     cracked:       'all',
     domain:        hashState.domain,
     source:        hashState.source,

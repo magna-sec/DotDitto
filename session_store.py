@@ -120,6 +120,7 @@ def apply_passwords() -> None:
 
 def get_filtered_users(
     search: str = "",
+    search_field: str = "all",
     cracked: str = "all",
     domain: str = "all",
     source: str = "all",
@@ -163,12 +164,22 @@ def get_filtered_users(
             if cracked == "uncracked" and u["password"]:
                 return False
         if s_lower:
-            if not (
-                s_lower in u["username"].lower()
-                or s_lower in u["domain"].lower()
-                or s_lower in u["nt_hash"]
-                or (u["password"] and s_lower in u["password"].lower())
-            ):
+            if search_field == "username":
+                match = s_lower in u["username"].lower()
+            elif search_field == "domain":
+                match = s_lower in u["domain"].lower()
+            elif search_field == "hash":
+                match = s_lower in u["nt_hash"]
+            elif search_field == "password":
+                match = bool(u["password"]) and s_lower in u["password"].lower()
+            else:
+                match = (
+                    s_lower in u["username"].lower()
+                    or s_lower in u["domain"].lower()
+                    or s_lower in u["nt_hash"]
+                    or (u["password"] and s_lower in u["password"].lower())
+                )
+            if not match:
                 return False
         return True
 

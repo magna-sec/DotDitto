@@ -173,6 +173,7 @@ def get_users():
 
     users = get_filtered_users(
         search          = request.args.get("search", ""),
+        search_field    = request.args.get("search_field", "all"),
         cracked         = request.args.get("cracked", "all"),
         domain          = request.args.get("domain", "all"),
         source          = request.args.get("source", "all"),
@@ -342,6 +343,7 @@ def export_csv():
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     users = get_filtered_users(
         search          = request.args.get("search", ""),
+        search_field    = request.args.get("search_field", "all"),
         cracked         = request.args.get("cracked", "all"),
         domain          = request.args.get("domain", "all"),
         source          = request.args.get("source", "all"),
