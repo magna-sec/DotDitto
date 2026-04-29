@@ -474,6 +474,22 @@ def paste_tier0():
     return jsonify({"success": True, "count": len(users)})
 
 
+@bp.route("/api/comment", methods=["POST"])
+def set_comment():
+    data = request.get_json(silent=True) or {}
+    key  = data.get("key", "").strip()
+    text = data.get("text", "").strip()
+    if not key:
+        return jsonify({"error": "No key provided"}), 400
+    comments = session.setdefault("user_comments", {})
+    if text:
+        comments[key] = text
+    else:
+        comments.pop(key, None)
+    save_session()
+    return jsonify({"success": True})
+
+
 @bp.route("/api/tier0", methods=["DELETE"])
 def clear_tier0():
     session["tier0_users"] = []

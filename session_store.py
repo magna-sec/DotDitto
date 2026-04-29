@@ -21,7 +21,8 @@ session: dict = {
     },
     "users": [],
     "pot_hashes": {},
-    "tier0_users": [],  # list of lowercase "user@domain" strings
+    "tier0_users": [],    # list of lowercase "user@domain" strings
+    "user_comments": {},  # keyed by "domain/username" (lowercase)
 }
 
 
@@ -48,6 +49,7 @@ def load_session_file() -> None:
             session.update(data)
             # Ensure fields added after initial save exist on every user object
             session.setdefault("tier0_users", [])
+            session.setdefault("user_comments", {})
             for u in session["users"]:
                 u.setdefault("aes256", None)
                 u.setdefault("aes128", None)
@@ -74,6 +76,7 @@ def clear_session() -> None:
             "users": [],
             "pot_hashes": {},
             "tier0_users": [],
+            "user_comments": {},
         }
     )
     save_session()
@@ -85,6 +88,7 @@ def replace_session(data: dict) -> None:
     session.update(data)
     session.setdefault("pot_hashes", {})
     session.setdefault("tier0_users", [])
+    session.setdefault("user_comments", {})
     session.setdefault(
         "metadata",
         {"created": None, "updated": None, "dump_sources": [], "pot_sources": []},
@@ -176,7 +180,8 @@ def get_filtered_users(
     tier0_only: bool = False,
 ) -> list:
     all_users = session["users"]
-    tier0_lookup = _build_tier0_lookup(session.get("tier0_users", []))
+    tier0_lookup  = _build_tier0_lookup(session.get("tier0_users", []))
+    comment_map   = session.get("user_comments", {})
 
     # Separate current accounts from history entries
     history_map: dict[tuple, list] = {}
@@ -256,6 +261,8 @@ def get_filtered_users(
         else:
             u_out["history"] = []
         u_out["is_tier0"] = check_is_tier0(u["username"], u["domain"], tier0_lookup)
+        ck = f"{u['domain'].lower()}/{u['username'].lower()}"
+        u_out["comment"] = comment_map.get(ck, "")
         result.append(u_out)
 
     return result

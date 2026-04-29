@@ -481,6 +481,53 @@
     td:hover .copy-btn, tr:hover .copy-btn { opacity: 1; }
     .copy-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
 
+    /* ── Comment popover ──────────────────────────────────────────────── */
+    .comment-popover {
+      position: fixed; z-index: 4000;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 12px;
+      width: 300px; box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    }
+    .comment-popover textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 5px; color: var(--text); padding: 7px 10px;
+      font-family: inherit; font-size: 13px; resize: vertical; min-height: 72px;
+      display: block;
+    }
+    .comment-popover textarea:focus { outline: none; border-color: var(--blue); }
+    .comment-popover-hdr {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .comment-popover-hdr .cp-user {
+      font-family: var(--font-mono); font-size: 12px; color: var(--blue);
+      text-transform: none; letter-spacing: 0; font-weight: 400;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;
+    }
+    .comment-popover-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .comment-popover-actions .spacer { flex: 1; }
+
+    /* ── Comment cell in table ─────────────────────────────────────────── */
+    .comment-cell {
+      cursor: pointer; max-width: 180px; min-width: 60px;
+    }
+    .comment-cell:hover { background: rgba(88,166,255,.05) !important; }
+    .comment-text {
+      font-size: 12px; color: var(--text-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      max-width: 160px; display: inline-block; vertical-align: middle;
+    }
+    .comment-add-icon {
+      font-size: 13px; color: var(--border2); opacity: 0;
+      transition: opacity .15s; vertical-align: middle;
+    }
+    tr:hover .comment-add-icon { opacity: 1; }
+    .comment-has-icon {
+      font-size: 11px; color: var(--blue); margin-left: 4px;
+      vertical-align: middle; opacity: .7;
+    }
+
     /* ── Password length badge ─────────────────────────────────────────── */
     .pw-len {
       display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px;
@@ -752,6 +799,21 @@
   </div>
 </div>
 
+<!-- ─── Comment edit popover ─────────────────────────────────────────────── -->
+<div id="comment-popover" class="comment-popover hidden">
+  <div class="comment-popover-hdr">
+    <span>Note</span>
+    <span class="cp-user" id="cp-user-label"></span>
+  </div>
+  <textarea id="comment-textarea" placeholder="Add a note… e.g. 'SNOW Admin', 'Has 2 VDIs'" rows="3"></textarea>
+  <div class="comment-popover-actions">
+    <button class="btn sm danger" id="comment-del-btn" onclick="saveComment('')">Remove</button>
+    <span class="spacer"></span>
+    <button class="btn sm" onclick="closeCommentPopover()">Cancel</button>
+    <button class="btn sm primary" onclick="saveComment()">Save</button>
+  </div>
+</div>
+
 <!-- ─── Header ───────────────────────────────────────────────────────────── -->
 <header>
   <div class="header-brand">
@@ -1016,6 +1078,7 @@ RETURN n</pre>
               <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
               <th onclick="sortBy('pw_len')" title="Sort by password length" style="width:46px;text-align:center">Len<span class="sort-arrow" id="sa-pw_len"></span></th>
               <th>History</th>
+              <th style="min-width:80px">Notes</th>
               <th>Source</th>
             </tr>
           </thead>
@@ -1086,6 +1149,7 @@ RETURN n</pre>
             <th>AES-256 Key</th>
             <th>AES-128 Key</th>
             <th>DES Key</th>
+            <th style="min-width:80px">Notes</th>
             <th>Source</th>
           </tr>
         </thead>
@@ -2093,6 +2157,7 @@ function renderHashesTable(users) {
       <td>${hashCol(u.aes256)}</td>
       <td>${hashCol(u.aes128)}</td>
       <td>${hashCol(u.des)}</td>
+      ${buildCommentCell(u)}
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
     </tr>`;
   }).join('');
@@ -2139,7 +2204,7 @@ function renderTable(users) {
   _pageUsers = users;
   const tbody = document.getElementById('table-body');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateSortArrows();
     return;
   }
@@ -2189,6 +2254,7 @@ function renderTable(users) {
 
     const srcLabel = u.dump_source || '—';
     const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
+    const commentCell = buildCommentCell(u);
     rows.push(`<tr class="${rowClass}" ${click}>
       <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
@@ -2197,6 +2263,7 @@ function renderTable(users) {
       <td>${pwHtml}</td>
       ${pwLenCell}
       <td>${histHtml}</td>
+      ${commentCell}
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
     </tr>`);
   }
@@ -2312,6 +2379,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeHistoryModal();
     closeModal();
+    closeCommentPopover();
   }
 });
 
@@ -2637,6 +2705,89 @@ async function renderDomainComparison() {
     wrap.innerHTML = `<div style="color:var(--red);font-size:12px;margin-top:10px;">Error: ${esc(err.message)}</div>`;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Comments
+══════════════════════════════════════════════════════════════════════════ */
+let _commentKey  = null;
+let _commentSaving = false;
+
+function buildCommentCell(u) {
+  const key = `${(u.domain || '').toLowerCase()}/${u.username.toLowerCase()}`;
+  const comment = u.comment || '';
+  const truncated = comment.length > 38 ? comment.slice(0, 35) + '…' : comment;
+  const inner = comment
+    ? `<span class="comment-text" title="${esc(comment)}">${esc(truncated)}</span><span class="comment-has-icon">✎</span>`
+    : `<span class="comment-add-icon">＋</span>`;
+  return `<td class="comment-cell"
+    data-ck="${esc(key)}"
+    data-username="${esc(u.username)}"
+    data-domain="${esc(u.domain || '')}"
+    data-comment="${esc(comment)}"
+    onclick="event.stopPropagation();openCommentPopover(event,this)"
+    title="${comment ? esc(comment) : 'Click to add note'}">${inner}</td>`;
+}
+
+function openCommentPopover(e, cell) {
+  const key      = cell.getAttribute('data-ck');
+  const username = cell.getAttribute('data-username');
+  const domain   = cell.getAttribute('data-domain');
+  const comment  = cell.getAttribute('data-comment');
+
+  _commentKey = key;
+  document.getElementById('cp-user-label').textContent =
+    (domain ? domain + '\\' : '') + username;
+  const ta = document.getElementById('comment-textarea');
+  ta.value = comment;
+  document.getElementById('comment-del-btn').classList.toggle('hidden', !comment);
+
+  const popover = document.getElementById('comment-popover');
+  popover.classList.remove('hidden');
+
+  // Position: prefer below the cell, nudge left if it would clip the viewport
+  const rect = cell.getBoundingClientRect();
+  const top  = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 316);
+  popover.style.top  = top  + 'px';
+  popover.style.left = left + 'px';
+
+  setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 30);
+}
+
+function closeCommentPopover() {
+  document.getElementById('comment-popover').classList.add('hidden');
+  _commentKey = null;
+}
+
+async function saveComment(forceText) {
+  if (!_commentKey || _commentSaving) return;
+  const text = forceText !== undefined ? forceText
+             : document.getElementById('comment-textarea').value.trim();
+  _commentSaving = true;
+  try {
+    await api('POST', '/api/comment', { key: _commentKey, text });
+    closeCommentPopover();
+    await loadUsers();
+  } catch (err) {
+    toast('Could not save note: ' + err.message, 'error');
+  } finally {
+    _commentSaving = false;
+  }
+}
+
+/* Ctrl+Enter to save, Escape to cancel */
+document.getElementById('comment-textarea').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeCommentPopover(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); saveComment(); }
+});
+
+/* Close on outside click */
+document.addEventListener('click', e => {
+  const pop = document.getElementById('comment-popover');
+  if (pop && !pop.classList.contains('hidden') && !pop.contains(e.target)) {
+    closeCommentPopover();
+  }
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    Tier-0 user list
