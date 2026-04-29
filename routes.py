@@ -182,19 +182,31 @@ def get_users():
         sort_by         = request.args.get("sort_by", "username"),
         sort_dir        = request.args.get("sort_dir", "asc"),
         exclude_domains = excluded or None,
+        tier0_only      = request.args.get("tier0_only", "false") == "true",
     )
 
     total  = len(users)
     pages  = max(1, (total + per_page - 1) // per_page)
     start  = (page - 1) * per_page
 
+    # Compute top passwords and cracked count from the full filtered result
+    pw_freq: dict[str, int] = {}
+    cracked_count = 0
+    for u in users:
+        if u.get("password") and not u.get("is_history") and not u.get("is_machine"):
+            pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
+            cracked_count += 1
+    top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
+
     return jsonify(
         {
-            "users":    users[start: start + per_page],
-            "total":    total,
-            "page":     page,
-            "per_page": per_page,
-            "pages":    pages,
+            "users":         users[start: start + per_page],
+            "total":         total,
+            "page":          page,
+            "per_page":      per_page,
+            "pages":         pages,
+            "cracked_count": cracked_count,
+            "top_passwords": [{"password": p, "count": c} for p, c in top_pw],
         }
     )
 
@@ -418,6 +430,55 @@ def export_word_wordlist():
         mimetype="text/plain",
         headers={"Content-Disposition": "attachment; filename=dotditto_words.txt"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Tier-0 user list
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/tier0", methods=["GET"])
+def get_tier0():
+    users = session.get("tier0_users", [])
+    return jsonify({"users": users, "count": len(users)})
+
+
+@bp.route("/api/tier0/upload", methods=["POST"])
+def upload_tier0():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "No file provided"}), 400
+    text = f.read().decode("utf-8", errors="replace")
+    users = [
+        line.strip().lower()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith('#')
+    ]
+    session["tier0_users"] = users
+    save_session()
+    return jsonify({"success": True, "count": len(users)})
+
+
+@bp.route("/api/tier0/paste", methods=["POST"])
+def paste_tier0():
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    if not text.strip():
+        return jsonify({"error": "No text provided"}), 400
+    users = [
+        line.strip().lower()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith('#')
+    ]
+    session["tier0_users"] = users
+    save_session()
+    return jsonify({"success": True, "count": len(users)})
+
+
+@bp.route("/api/tier0", methods=["DELETE"])
+def clear_tier0():
+    session["tier0_users"] = []
+    save_session()
+    return jsonify({"success": True})
 
 
 # ---------------------------------------------------------------------------

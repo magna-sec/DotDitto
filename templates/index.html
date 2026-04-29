@@ -481,6 +481,23 @@
     td:hover .copy-btn, tr:hover .copy-btn { opacity: 1; }
     .copy-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
 
+    /* ── Password length badge ─────────────────────────────────────────── */
+    .pw-len {
+      display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px;
+      background: var(--surface3); color: var(--text-muted); border: 1px solid var(--border);
+      font-family: var(--font-mono); margin-left: 5px; vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    /* ── Tier-0 badge ──────────────────────────────────────────────────── */
+    .badge-tier0 {
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+      background: rgba(248,81,73,.18); color: var(--red);
+      border: 1px solid rgba(248,81,73,.4); margin-left: 6px;
+      vertical-align: middle; white-space: nowrap; letter-spacing: .04em;
+    }
+    tr.row-tier0 > td:first-child { border-left: 2px solid rgba(248,81,73,.5); }
+
     /* ── Pagination ──────────────────────────────────────────────────── */
     .pagination {
       display: flex; align-items: center; justify-content: space-between;
@@ -590,6 +607,8 @@
     .domain-row-name.is-hidden { color: var(--text-muted); text-decoration: line-through; opacity: .55; }
     .btn.active-filter { border-color: var(--yellow); color: var(--yellow); }
     .btn.active-filter:hover { background: var(--yellow-dim); }
+    .btn.tier0-loaded { border-color: var(--red); color: var(--red); }
+    .btn.tier0-loaded:hover { background: var(--red-dim); }
 
     /* ── Client Mode ─────────────────────────────────────────────────────── */
     .client-btn-group { display: flex; }
@@ -770,6 +789,35 @@
       </div>
     </div>
     <div style="position:relative">
+      <button class="btn sm" id="btn-tier0" onclick="toggleTier0Panel(event)" title="Manage tier-0 user list">Tier 0 ▾</button>
+      <div id="tier0-panel" class="domain-panel hidden" style="min-width:280px">
+        <div class="domain-panel-hdr">
+          <span class="domain-panel-title">Tier 0 Users</span>
+          <span id="tier0-panel-count" style="font-size:12px;color:var(--text-muted);">None loaded</span>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">
+          One entry per line:<br>
+          <span style="font-family:var(--font-mono)">bob@corp.local</span>
+        </p>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px;">
+          <label class="btn sm" style="cursor:pointer;justify-content:center">
+            Upload file
+            <input type="file" id="tier0-file-input" accept=".txt,.csv,.list">
+          </label>
+          <button class="btn sm" onclick="closeTier0Panel();openModal('tier0')">Paste text</button>
+          <button class="btn sm danger" id="btn-tier0-clear" onclick="clearTier0()" disabled>Clear</button>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:10px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">BloodHound Query</div>
+          <pre id="bh-query-pre" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 9px;font-size:10px;font-family:var(--font-mono);color:var(--blue);margin:0 0 6px;white-space:pre-wrap;word-break:break-all;line-height:1.5;user-select:all">MATCH (n)
+WHERE (n:User OR n:AZUser)
+  AND ((n:Tag_Tier_Zero) OR COALESCE(n.system_tags, '') CONTAINS 'admin_tier_0')
+RETURN n</pre>
+          <button class="btn sm" onclick="copyTier0BHQuery()" style="width:100%;justify-content:center">Copy query</button>
+        </div>
+      </div>
+    </div>
+    <div style="position:relative">
       <button class="btn sm" id="btn-domain-mgr" onclick="toggleDomainPanel(event)" disabled title="Show/hide individual domains from all stats">Domains ▾</button>
       <div id="domain-manager-panel" class="domain-panel hidden">
         <div class="domain-panel-hdr">
@@ -915,6 +963,11 @@
           <option value="uncracked">Uncracked only</option>
         </select>
 
+        <select id="filter-tier0" onchange="filterChanged()">
+          <option value="all">All users</option>
+          <option value="tier0">Tier 0 only</option>
+        </select>
+
         <select id="filter-domain" onchange="filterChanged()">
           <option value="all">All domains</option>
         </select>
@@ -940,6 +993,7 @@
         </select>
 
         <div class="toolbar-right">
+          <span id="filter-result-count" style="font-size:12px;color:var(--text-muted);white-space:nowrap;padding-right:6px;"></span>
           <button class="btn sm client-hide" onclick="copyUncracked()" title="Copy all unique uncracked NT hashes to clipboard">
             Copy Uncracked Hashes
           </button>
@@ -960,6 +1014,7 @@
               <th onclick="sortBy('rid')">RID<span class="sort-arrow" id="sa-rid"></span></th>
               <th>NTLM Hash</th>
               <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
+              <th onclick="sortBy('pw_len')" title="Sort by password length" style="width:46px;text-align:center">Len<span class="sort-arrow" id="sa-pw_len"></span></th>
               <th>History</th>
               <th>Source</th>
             </tr>
@@ -1181,6 +1236,7 @@ const state = {
   domain:      'all',
   source:      'all',
   showMachines: false,
+  tier0Only:   false,
   lastParams: {},
 };
 
@@ -1229,13 +1285,19 @@ function openModal(mode) {
   _pendingDumpFile = null;
   _modalMode = mode;
   _resetModal();
-  document.getElementById('modal-title').textContent =
-    mode === 'dump' ? 'Paste secretsdump output' : 'Paste hashcat pot file contents';
+  const titles = {
+    dump:  'Paste secretsdump output',
+    pot:   'Paste hashcat pot file contents',
+    tier0: 'Paste tier-0 user list',
+  };
+  const placeholders = {
+    dump:  'DOMAIN\\username:RID:LMHash:NTHash:::\n...',
+    pot:   'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...',
+    tier0: 'bob@corp.local\nalice@corp.local\nadmin@corp.onmicrosoft.com\n...',
+  };
+  document.getElementById('modal-title').textContent = titles[mode] || 'Paste text';
   document.getElementById('modal-textarea').value = '';
-  document.getElementById('modal-textarea').placeholder =
-    mode === 'dump'
-      ? 'DOMAIN\\username:RID:LMHash:NTHash:::\n...'
-      : 'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...';
+  document.getElementById('modal-textarea').placeholder = placeholders[mode] || '';
   if (mode === 'dump') {
     document.getElementById('modal-source-row').style.display = 'block';
     document.getElementById('modal-source-input').value = '';
@@ -1292,6 +1354,8 @@ async function submitModal() {
   _resetModal();
   if (_modalMode === 'dump') {
     await loadPasteDump(text, source);
+  } else if (_modalMode === 'tier0') {
+    await loadPasteTier0(text);
   } else {
     await loadPastePot(text);
   }
@@ -1539,6 +1603,7 @@ function filterChanged() {
   state.domain       = document.getElementById('filter-domain').value;
   state.source       = document.getElementById('filter-source').value;
   state.showMachines = document.getElementById('chk-machines').checked;
+  state.tier0Only    = document.getElementById('filter-tier0').value === 'tier0';
   state.page = 1;
   loadStats();   // re-renders stat cards with new domain/source scope
   loadUsers();
@@ -1581,7 +1646,6 @@ async function loadStats() {
     const stats = await api('GET', `/api/stats?${params}`);
     state.hasDump = stats.total_users > 0 || stats.machine_accounts > 0;
     renderStats(stats);
-    renderTopPasswords(stats.top_passwords);
     buildDomainFilter(stats.domains);
     buildSourceFilter(stats.sources || []);
     updateDumpStatusFromStats(stats);
@@ -1602,6 +1666,7 @@ async function loadUsers() {
     show_machines: state.showMachines,
     sort_by:      state.sortCol,
     sort_dir:     state.sortDir,
+    tier0_only:   state.tier0Only,
     ...excludeParam(),
   };
   state.lastParams = params;
@@ -1612,6 +1677,8 @@ async function loadUsers() {
     state.totalRows  = data.total;
     renderTable(data.users);
     renderPagination(data);
+    renderTopPasswords(data.top_passwords || []);
+    renderFilterCount(data.total, data.cracked_count ?? 0);
     showDataUI();
   } catch (err) {
     console.error('users error', err);
@@ -1621,13 +1688,19 @@ async function loadUsers() {
 
 async function initSession() {
   try {
-    const info = await api('GET', '/api/session');
+    const [info, t0] = await Promise.all([
+      api('GET', '/api/session'),
+      api('GET', '/api/tier0'),
+    ]);
     state.hasDump = info.has_dump;
     state.hasPot  = info.has_pot;
 
     if (info.has_pot) {
       const src = info.metadata?.pot_sources?.join(', ') || 'saved session';
       setPotStatus(true, `${src}  (${info.pot_count} hashes)`);
+    }
+    if (t0.count > 0) {
+      setTier0Status(t0.count, `saved session  (${t0.count} users)`);
     }
     if (info.has_dump) {
       await refresh();  // loadStats → updateDumpStatusFromStats will set the dump status label
@@ -2011,8 +2084,10 @@ function renderHashesTable(users) {
   tbody.innerHTML = users.map(u => {
     const srcLabel   = u.dump_source || '—';
     const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
-    return `<tr class="${u.is_machine ? 'row-machine' : ''}">
-      <td class="mono"><span class="username-text">${esc(u.username)}</span></td>
+    const tier0Badge = u.is_tier0 ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
+    const rowClass = [u.is_machine ? 'row-machine' : '', u.is_tier0 ? 'row-tier0' : ''].filter(Boolean).join(' ');
+    return `<tr class="${rowClass}">
+      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td>${hashCol(u.nt_hash)}</td>
       <td>${hashCol(u.aes256)}</td>
@@ -2064,7 +2139,7 @@ function renderTable(users) {
   _pageUsers = users;
   const tbody = document.getElementById('table-body');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateSortArrows();
     return;
   }
@@ -2076,13 +2151,19 @@ function renderTable(users) {
     const hasHist     = history.length > 0;
     const histCracked = history.filter(h => h.password);
 
+    /* Tier-0 badge */
+    const tier0Badge = u.is_tier0
+      ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
+
     /* Password cell */
     let pwHtml;
+    let pwLenCell = '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     if (u.password) {
       const shared = (u.password_count || 1) > 1
         ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
       pwHtml = `<span class="pw-cracked">${esc(u.password)}</span>${shared} `
              + `<button class="copy-btn" onclick="event.stopPropagation();copyText(${JSON.stringify(u.password)})">copy</button>`;
+      pwLenCell = `<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${u.password.length}</td>`;
     } else {
       const warn = histCracked.length > 0
         ? `<span class="badge-hist-warn" title="A previous password was cracked — click to view">hist cracked</span>`
@@ -2101,15 +2182,20 @@ function renderTable(users) {
     }
 
     const click = hasHist ? `onclick="openHistoryModal(${i})"` : '';
+    const rowClass = [
+      hasHist ? 'row-has-history' : (u.is_machine ? 'row-machine' : ''),
+      u.is_tier0 ? 'row-tier0' : '',
+    ].filter(Boolean).join(' ');
 
     const srcLabel = u.dump_source || '—';
     const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
-    rows.push(`<tr class="${hasHist ? 'row-has-history' : (u.is_machine ? 'row-machine' : '')}" ${click}>
-      <td class="mono"><span class="username-text">${esc(u.username)}</span></td>
+    rows.push(`<tr class="${rowClass}" ${click}>
+      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
       <td>${hashCell(u.nt_hash)}</td>
       <td>${pwHtml}</td>
+      ${pwLenCell}
       <td>${histHtml}</td>
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
     </tr>`);
@@ -2120,7 +2206,7 @@ function renderTable(users) {
 }
 
 function updateSortArrows() {
-  ['username','domain','rid','password'].forEach(col => {
+  ['username','domain','rid','password','pw_len'].forEach(col => {
     const el = document.getElementById(`sa-${col}`);
     if (el) el.textContent = state.sortCol === col ? (state.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
   });
@@ -2235,6 +2321,17 @@ function renderPagination(data) {
   document.getElementById('pagination-info').textContent =
     data.total > 0 ? `Showing ${start}–${end} of ${data.total.toLocaleString()} entries` : 'No entries';
   document.getElementById('page-label').textContent = `Page ${data.page} / ${data.pages}`;
+}
+
+function renderFilterCount(total, crackedCount) {
+  const el = document.getElementById('filter-result-count');
+  if (!el) return;
+  if (total === 0) { el.textContent = 'No matching users'; return; }
+  const rate = total > 0 ? Math.round(crackedCount / total * 100) : 0;
+  const crackedPart = crackedCount > 0
+    ? `  ·  ${crackedCount.toLocaleString()} cracked (${rate}%)`
+    : '';
+  el.textContent = `${total.toLocaleString()} user${total === 1 ? '' : 's'}${crackedPart}`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2539,6 +2636,84 @@ async function renderDomainComparison() {
   } catch (err) {
     wrap.innerHTML = `<div style="color:var(--red);font-size:12px;margin-top:10px;">Error: ${esc(err.message)}</div>`;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tier-0 user list
+══════════════════════════════════════════════════════════════════════════ */
+document.getElementById('tier0-file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadFileTier0(e.target.files[0]);
+  e.target.value = '';
+  closeTier0Panel();
+});
+
+function toggleTier0Panel(e) {
+  if (e) e.stopPropagation();
+  const panel = document.getElementById('tier0-panel');
+  panel.classList.toggle('hidden');
+}
+
+function closeTier0Panel() {
+  document.getElementById('tier0-panel').classList.add('hidden');
+}
+
+document.addEventListener('click', e => {
+  const panel = document.getElementById('tier0-panel');
+  const btn   = document.getElementById('btn-tier0');
+  if (panel && !panel.classList.contains('hidden') &&
+      !panel.contains(e.target) && e.target !== btn) {
+    panel.classList.add('hidden');
+  }
+});
+
+async function loadFileTier0(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await api('POST', '/api/tier0/upload', fd);
+    setTier0Status(res.count, `${file.name}  (${res.count} users)`);
+    toast(`Loaded ${res.count} tier-0 users`, 'success');
+    if (state.hasDump) await loadUsers();
+  } catch (err) {
+    toast(`Tier-0 error: ${err.message}`, 'error', 5000);
+  }
+}
+
+async function loadPasteTier0(text) {
+  try {
+    const res = await api('POST', '/api/tier0/paste', { text });
+    setTier0Status(res.count, `Pasted  (${res.count} users)`);
+    toast(`Loaded ${res.count} tier-0 users`, 'success');
+    if (state.hasDump) await loadUsers();
+  } catch (err) {
+    toast(`Tier-0 error: ${err.message}`, 'error', 5000);
+  }
+}
+
+async function clearTier0() {
+  try {
+    await api('DELETE', '/api/tier0');
+    setTier0Status(0, '');
+    closeTier0Panel();
+    if (state.hasDump) await loadUsers();
+    toast('Tier-0 list cleared', 'info');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function copyTier0BHQuery() {
+  const q = document.getElementById('bh-query-pre').textContent;
+  copyText(q);
+}
+
+function setTier0Status(count, label) {
+  const btn       = document.getElementById('btn-tier0');
+  const countEl   = document.getElementById('tier0-panel-count');
+  const clearBtn  = document.getElementById('btn-tier0-clear');
+  const on = count > 0;
+  btn.textContent = on ? `Tier 0 (${count}) ▾` : 'Tier 0 ▾';
+  btn.classList.toggle('tier0-loaded', on);
+  if (countEl) countEl.textContent = on ? label : 'None loaded';
+  if (clearBtn) clearBtn.disabled = !on;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

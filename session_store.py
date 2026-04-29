@@ -21,6 +21,7 @@ session: dict = {
     },
     "users": [],
     "pot_hashes": {},
+    "tier0_users": [],  # list of lowercase "user@domain" strings
 }
 
 
@@ -46,6 +47,7 @@ def load_session_file() -> None:
         if "users" in data:
             session.update(data)
             # Ensure fields added after initial save exist on every user object
+            session.setdefault("tier0_users", [])
             for u in session["users"]:
                 u.setdefault("aes256", None)
                 u.setdefault("aes128", None)
@@ -71,6 +73,7 @@ def clear_session() -> None:
             },
             "users": [],
             "pot_hashes": {},
+            "tier0_users": [],
         }
     )
     save_session()
@@ -81,6 +84,7 @@ def replace_session(data: dict) -> None:
     session.clear()
     session.update(data)
     session.setdefault("pot_hashes", {})
+    session.setdefault("tier0_users", [])
     session.setdefault(
         "metadata",
         {"created": None, "updated": None, "dump_sources": [], "pot_sources": []},
@@ -115,6 +119,46 @@ def apply_passwords() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tier-0 helpers
+# ---------------------------------------------------------------------------
+
+def _build_tier0_lookup(tier0_list: list) -> set:
+    """
+    Build a fast lookup set from the tier0 user list.
+    For each entry like "bob@hi.local", adds both "bob@hi.local" and "bob@hi"
+    so that NTDS users with either the FQDN or NetBIOS domain name match.
+    """
+    lookup: set = set()
+    for entry in tier0_list:
+        e = entry.strip().lower()
+        if not e or e.startswith('#'):
+            continue
+        lookup.add(e)
+        if '@' in e:
+            user_part, domain_part = e.split('@', 1)
+            first_label = domain_part.split('.')[0]
+            if first_label != domain_part:
+                lookup.add(f"{user_part}@{first_label}")
+    return lookup
+
+
+def check_is_tier0(username: str, domain: str, tier0_lookup: set) -> bool:
+    if not tier0_lookup:
+        return False
+    u = username.lower()
+    d = domain.lower()
+    if f"{u}@{d}" in tier0_lookup:
+        return True
+    first_label = d.split('.')[0]
+    if first_label != d and f"{u}@{first_label}" in tier0_lookup:
+        return True
+    # match bare username (no domain in tier0 entry)
+    if u in tier0_lookup:
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Filtering / sorting
 # ---------------------------------------------------------------------------
 
@@ -129,8 +173,10 @@ def get_filtered_users(
     sort_by: str = "username",
     sort_dir: str = "asc",
     exclude_domains: set | None = None,
+    tier0_only: bool = False,
 ) -> list:
     all_users = session["users"]
+    tier0_lookup = _build_tier0_lookup(session.get("tier0_users", []))
 
     # Separate current accounts from history entries
     history_map: dict[tuple, list] = {}
@@ -163,6 +209,8 @@ def get_filtered_users(
                 return False
             if cracked == "uncracked" and u["password"]:
                 return False
+        if tier0_only and not check_is_tier0(u["username"], u["domain"], tier0_lookup):
+            return False
         if s_lower:
             if search_field == "username":
                 match = s_lower in u["username"].lower()
@@ -193,6 +241,7 @@ def get_filtered_users(
         "rid":      lambda u: int(u["rid"]) if u["rid"].isdigit() else 0,
         "nt_hash":  lambda u: u["nt_hash"],
         "password": lambda u: (u["password"] or "").lower(),
+        "pw_len":   lambda u: len(u["password"]) if u["password"] else -1,
     }
     if sort_by in _sort_keys:
         filtered.sort(key=_sort_keys[sort_by], reverse=reverse)
@@ -206,6 +255,7 @@ def get_filtered_users(
             u_out["history"] = history_map.get(key, [])
         else:
             u_out["history"] = []
+        u_out["is_tier0"] = check_is_tier0(u["username"], u["domain"], tier0_lookup)
         result.append(u_out)
 
     return result
