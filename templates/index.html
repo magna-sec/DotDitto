@@ -147,6 +147,7 @@
     .source-tag {
       margin-left: auto; font-size: 11px; color: var(--text-muted);
       background: var(--surface2); padding: 2px 8px; border-radius: 4px;
+      max-width: 200px; word-break: break-word; white-space: normal;
     }
     .drop-zone {
       border: 2px dashed var(--border2); border-radius: 6px; padding: 20px;
@@ -254,16 +255,14 @@
     /* Row types */
     .row-machine td { opacity: .55; }
 
-    /* ── Rows that have history — clickable ─────────────────────────── */
-    tr.row-has-history { cursor: pointer; }
-    tr.row-has-history:hover > td { background: rgba(88,166,255,.08) !important; }
-
-    /* Summary badge on the parent row */
+    /* ── History button in row ───────────────────────────────────────── */
     .hist-summary {
       display: inline-flex; align-items: center; gap: 5px;
-      font-size: 11px; padding: 1px 8px; border-radius: 4px;
+      font-size: 11px; padding: 2px 8px; border-radius: 4px;
       background: var(--blue-dim); color: var(--blue); white-space: nowrap;
+      border: none; cursor: pointer; font-family: inherit; line-height: 1.5;
     }
+    .hist-summary:hover { filter: brightness(1.3); }
     .hist-summary.has-cracked { background: var(--green-dim); color: var(--green); }
 
     /* Badge when current password is unknown but history was cracked */
@@ -755,6 +754,522 @@
     .compare-stat.green  .cs-val { color: var(--green); }
     .compare-stat.red    .cs-val { color: var(--red); }
     .compare-stat.yellow .cs-val { color: var(--yellow); }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       Theme: Terminal  (green phosphor on black)
+    ══════════════════════════════════════════════════════════════════════ */
+    body[data-theme="terminal"] {
+      --bg:          #090c09;
+      --surface:     #0d150d;
+      --surface2:    #132013;
+      --surface3:    #1a2a1a;
+      --border:      #1c3a1c;
+      --border2:     #285028;
+      --text:        #33ff44;
+      --text-muted:  #1d8a28;
+      --green:       #00ff41;
+      --green-dim:   rgba(0,255,65,.14);
+      --red:         #ff3333;
+      --red-dim:     rgba(255,51,51,.14);
+      --yellow:      #ccdd00;
+      --yellow-dim:  rgba(204,221,0,.14);
+      --blue:        #44ffaa;
+      --blue-dim:    rgba(68,255,170,.12);
+      --purple:      #88ffcc;
+      --purple-dim:  rgba(136,255,204,.12);
+      --font-mono:   'Courier New', 'Lucida Console', monospace;
+      font-family: 'Courier New', 'Lucida Console', monospace;
+    }
+    body[data-theme="terminal"] input,
+    body[data-theme="terminal"] select,
+    body[data-theme="terminal"] textarea,
+    body[data-theme="terminal"] button { font-family: 'Courier New', 'Lucida Console', monospace; }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       Theme: Synthwave  (retro 80s neon)
+    ══════════════════════════════════════════════════════════════════════ */
+    body[data-theme="synthwave"] {
+      --bg:          #0d0221;
+      --surface:     #180435;
+      --surface2:    #250750;
+      --surface3:    #310a66;
+      --border:      #5a1a8a;
+      --border2:     #8833cc;
+      --text:        #f0d8ff;
+      --text-muted:  #b070e0;
+      --green:       #00ffcc;
+      --green-dim:   rgba(0,255,204,.13);
+      --red:         #ff3366;
+      --red-dim:     rgba(255,51,102,.13);
+      --yellow:      #ffee44;
+      --yellow-dim:  rgba(255,238,68,.13);
+      --blue:        #77aaff;
+      --blue-dim:    rgba(119,170,255,.14);
+      --purple:      #ff77ff;
+      --purple-dim:  rgba(255,119,255,.16);
+      --font-mono:   'Courier New', monospace;
+    }
+    body[data-theme="synthwave"] .brand-text h1 { color: #ff77ff; }
+    body[data-theme="synthwave"] .stat-card { border-color: rgba(136,51,204,.45); }
+    body[data-theme="synthwave"] .top-pw-card,
+    body[data-theme="synthwave"] .table-wrap,
+    body[data-theme="synthwave"] .analysis-card { border-color: rgba(90,26,138,.6); }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       Theme: Classic  (Windows 95 era)
+    ══════════════════════════════════════════════════════════════════════ */
+    body[data-theme="classic"] {
+      --bg:          #008080;
+      --surface:     #c0c0c0;
+      --surface2:    #d0ccc8;
+      --surface3:    #e0dcd8;
+      --border:      #808080;
+      --border2:     #606060;
+      --text:        #000000;
+      --text-muted:  #404040;
+      --green:       #006400;
+      --green-dim:   rgba(0,100,0,.18);
+      --red:         #8b0000;
+      --red-dim:     rgba(139,0,0,.18);
+      --yellow:      #808000;
+      --yellow-dim:  rgba(128,128,0,.2);
+      --blue:        #000080;
+      --blue-dim:    rgba(0,0,128,.14);
+      --purple:      #800080;
+      --purple-dim:  rgba(128,0,128,.14);
+      --font-mono:   'Courier New', monospace;
+      font-family: 'Tahoma', 'MS Sans Serif', 'Arial', sans-serif;
+      font-size: 12px;
+    }
+    body[data-theme="classic"] input,
+    body[data-theme="classic"] select,
+    body[data-theme="classic"] textarea,
+    body[data-theme="classic"] button { font-family: 'Tahoma', 'MS Sans Serif', 'Arial', sans-serif; }
+
+    /* ── Win95 helper mixins (via class) ───── */
+    /* Raised 3-D surface (buttons, panels) */
+    body[data-theme="classic"] header {
+      background: linear-gradient(90deg,#000080 0%,#1084d0 100%);
+      border-bottom: 2px solid #000040;
+    }
+    body[data-theme="classic"] .brand-logo {
+      background: #c0c0c0 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      color: #000080 !important;
+    }
+    body[data-theme="classic"] .brand-text h1   { color: #ffffff !important; font-weight: bold; text-shadow: 1px 1px 0 #000040; }
+    body[data-theme="classic"] .brand-text .subtitle { color: #c8d8ff !important; }
+    body[data-theme="classic"] .header-badge {
+      background: #c0c0c0 !important; color: #000000 !important;
+      border: 1px solid #808080 !important; border-radius: 0 !important;
+    }
+
+    /* Raised panel look for all cards */
+    body[data-theme="classic"] .upload-card,
+    body[data-theme="classic"] .stat-card,
+    body[data-theme="classic"] .top-pw-card,
+    body[data-theme="classic"] .table-wrap,
+    body[data-theme="classic"] .analysis-card,
+    body[data-theme="classic"] .compare-section,
+    body[data-theme="classic"] .compare-domain-card,
+    body[data-theme="classic"] .mini-card,
+    body[data-theme="classic"] .complexity-card,
+    body[data-theme="classic"] .reuse-pill,
+    body[data-theme="classic"] .domain-panel,
+    body[data-theme="classic"] .client-opts-panel {
+      background: #c0c0c0 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      border-radius: 0 !important;
+      box-shadow: 1px 1px 0 1px #000000 !important;
+    }
+
+    /* Modals */
+    body[data-theme="classic"] .modal,
+    body[data-theme="classic"] .hist-modal {
+      background: #c0c0c0 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      border-radius: 0 !important;
+      box-shadow: 2px 2px 0 2px #000000 !important;
+    }
+    /* Win95 modal title bar */
+    body[data-theme="classic"] .modal h3 {
+      background: linear-gradient(90deg,#000080,#1084d0) !important;
+      color: #ffffff !important;
+      margin: -24px -24px 14px -24px;
+      padding: 4px 8px;
+      font-size: 12px !important;
+      font-weight: bold;
+      border-radius: 0 !important;
+    }
+    body[data-theme="classic"] .hist-modal-hdr {
+      background: linear-gradient(90deg,#000080,#1084d0) !important;
+      border-bottom: 2px solid #000040 !important;
+    }
+    body[data-theme="classic"] .hist-modal-title { color: #ffffff !important; font-size: 13px !important; }
+    body[data-theme="classic"] .hist-modal-sub   { color: #c8d8ff !important; }
+    body[data-theme="classic"] .hist-modal-close { color: #ffffff !important; }
+
+    /* Buttons */
+    body[data-theme="classic"] .btn {
+      background: #c0c0c0 !important;
+      color: #000000 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      border-radius: 0 !important;
+      box-shadow: 1px 1px 0 1px #000000 !important;
+      font-weight: normal !important;
+    }
+    body[data-theme="classic"] .btn:hover {
+      background: #d0d0d0 !important;
+      color: #000000 !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+    }
+    body[data-theme="classic"] .btn.primary {
+      background: #c0c0c0 !important;
+      color: #000080 !important;
+      font-weight: bold !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+    }
+    body[data-theme="classic"] .btn.primary:hover { color: #000080 !important; }
+    body[data-theme="classic"] .btn.danger { color: #8b0000 !important; }
+    body[data-theme="classic"] .btn:active,
+    body[data-theme="classic"] .btn:focus {
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+      box-shadow: none !important;
+    }
+
+    /* Inputs: sunken 3-D look */
+    body[data-theme="classic"] .search-input,
+    body[data-theme="classic"] .modal textarea,
+    body[data-theme="classic"] .comment-popover textarea,
+    body[data-theme="classic"] #modal-source-input {
+      background: #ffffff !important;
+      color: #000000 !important;
+      border: 2px solid !important;
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    body[data-theme="classic"] .search-input:focus,
+    body[data-theme="classic"] .modal textarea:focus,
+    body[data-theme="classic"] #modal-source-input:focus {
+      outline: 1px dotted #000000 !important;
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+    }
+    body[data-theme="classic"] .toolbar select,
+    body[data-theme="classic"] .analysis-toolbar select,
+    body[data-theme="classic"] #per-page-sel,
+    body[data-theme="classic"] #hash-per-page-sel {
+      background: #ffffff !important;
+      color: #000000 !important;
+      border: 2px solid !important;
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+      border-radius: 0 !important;
+    }
+    body[data-theme="classic"] .drop-zone {
+      background: #ffffff !important;
+      border: 2px solid !important;
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+      border-radius: 0 !important;
+    }
+    body[data-theme="classic"] .drop-zone:hover,
+    body[data-theme="classic"] .drop-zone.drag-over {
+      background: #e0e8ff !important;
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+    }
+    body[data-theme="classic"] .drop-zone.loaded {
+      border-style: solid !important;
+      border-color: #008000 #ffffff #ffffff #008000 !important;
+    }
+    body[data-theme="classic"] .drop-zone p  { color: #000000 !important; }
+
+    /* Table */
+    body[data-theme="classic"] thead { background: #000080 !important; }
+    body[data-theme="classic"] th {
+      background: #000080 !important;
+      color: #ffffff !important;
+      border-bottom: 2px solid #000040 !important;
+    }
+    body[data-theme="classic"] th:hover { color: #ffff88 !important; }
+    body[data-theme="classic"] td {
+      background: #ffffff !important;
+      color: #000000 !important;
+      border-bottom: 1px solid #c0c0c0 !important;
+    }
+    body[data-theme="classic"] tbody tr:hover td {
+      background: #000080 !important;
+      color: #ffffff !important;
+    }
+    body[data-theme="classic"] tbody tr:hover .pw-cracked { color: #88ff88 !important; }
+    body[data-theme="classic"] tbody tr:hover .pw-none    { color: #ffaaaa !important; }
+    body[data-theme="classic"] tbody tr:hover .hash-text  { color: #ccccff !important; }
+    body[data-theme="classic"] tbody tr:hover .copy-btn   { color: #cccccc !important; }
+    body[data-theme="classic"] .pagination {
+      background: #c0c0c0 !important;
+      border-top: 2px solid #808080 !important;
+      color: #000000 !important;
+    }
+
+    /* Masks table */
+    body[data-theme="classic"] .masks-table th { background: #000080 !important; color: #ffffff !important; }
+    body[data-theme="classic"] .masks-table td { background: #ffffff !important; color: #000000 !important; }
+    body[data-theme="classic"] .masks-table tr:hover td { background: #e0e8ff !important; }
+    body[data-theme="classic"] .mask-str {
+      background: #ffffff !important;
+      border: 1px inset #808080 !important;
+      border-radius: 0 !important;
+      color: #000080 !important;
+    }
+
+    /* Tab bar */
+    body[data-theme="classic"] .tab-bar {
+      background: #c0c0c0 !important;
+      border-bottom: 2px solid #808080 !important;
+    }
+    body[data-theme="classic"] .tab-btn {
+      background: #c0c0c0 !important;
+      color: #000000 !important;
+      border-radius: 0 !important;
+      border-bottom-color: transparent !important;
+    }
+    body[data-theme="classic"] .tab-btn:hover { color: #000080 !important; }
+    body[data-theme="classic"] .tab-btn.active {
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-weight: bold !important;
+      border-bottom-color: #ffffff !important;
+    }
+
+    /* Toasts */
+    body[data-theme="classic"] .toast {
+      background: #c0c0c0 !important;
+      color: #000000 !important;
+      border-radius: 0 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      box-shadow: 1px 1px 0 1px #000000 !important;
+    }
+    body[data-theme="classic"] .toast.success { border-left-color: #008000 !important; }
+    body[data-theme="classic"] .toast.error   { border-left-color: #8b0000 !important; }
+    body[data-theme="classic"] .toast.info    { border-left-color: #000080 !important; }
+
+    /* History cards & timeline */
+    body[data-theme="classic"] .hist-card {
+      background: #c0c0c0 !important;
+      border: 2px solid !important;
+      border-color: #808080 #ffffff #ffffff #808080 !important;
+      border-radius: 0 !important;
+    }
+    body[data-theme="classic"] .hist-card.is-cracked { background: #d8f0d8 !important; }
+    body[data-theme="classic"] .hist-card.is-current { background: #d8e0f8 !important; }
+    body[data-theme="classic"] .hf-val.cracked { color: #006400 !important; }
+    body[data-theme="classic"] .hf-val.unknown { color: #8b0000 !important; }
+    body[data-theme="classic"] .hf-copy {
+      background: #c0c0c0 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      border-radius: 0 !important;
+      color: #000000 !important;
+    }
+    body[data-theme="classic"] .hist-timeline::before { background: #808080 !important; }
+    body[data-theme="classic"] .hist-dot { background: #c0c0c0 !important; border-color: #808080 !important; }
+    body[data-theme="classic"] .hist-dot.is-current { background: #000080 !important; border-color: #000080 !important; }
+    body[data-theme="classic"] .hist-dot.is-cracked { background: #008000 !important; border-color: #008000 !important; }
+
+    /* Passwords in table */
+    body[data-theme="classic"] .pw-cracked { color: #006400 !important; }
+    body[data-theme="classic"] .pw-none    { color: #8b0000 !important; }
+    body[data-theme="classic"] .hash-text  { color: #404040 !important; }
+
+    /* Top passwords chart */
+    body[data-theme="classic"] .pw-bar-fill  { background: rgba(0,0,128,.18) !important; border-left-color: #000080 !important; }
+    body[data-theme="classic"] .pw-bar-label { color: #000080 !important; }
+    body[data-theme="classic"] .word-bar-fill   { background: rgba(128,0,128,.18) !important; border-left-color: #800080 !important; }
+    body[data-theme="classic"] .prefix-bar-fill { background: rgba(128,128,0,.2) !important; border-left-color: #808000 !important; }
+
+    /* Length chart */
+    body[data-theme="classic"] .len-bar { background: rgba(0,0,128,.2) !important; border-top-color: #000080 !important; }
+
+    /* Badges */
+    body[data-theme="classic"] .badge-machine { background: #d0ccc8 !important; border-color: #808080 !important; color: #404040 !important; }
+    body[data-theme="classic"] .hist-summary  { background: rgba(0,0,128,.14) !important; color: #000080 !important; }
+    body[data-theme="classic"] .hist-summary.has-cracked { background: rgba(0,100,0,.14) !important; color: #006400 !important; }
+    body[data-theme="classic"] .badge-hist-warn { background: rgba(128,128,0,.2) !important; color: #604000 !important; }
+    body[data-theme="classic"] .badge-tier0     { background: rgba(139,0,0,.18) !important; color: #8b0000 !important; }
+
+    /* Links */
+    body[data-theme="classic"] a { color: #000080 !important; }
+
+    /* Comment popover */
+    body[data-theme="classic"] .comment-popover {
+      background: #c0c0c0 !important;
+      border: 2px solid !important;
+      border-color: #ffffff #808080 #808080 #ffffff !important;
+      border-radius: 0 !important;
+      box-shadow: 2px 2px 0 2px #000000 !important;
+    }
+    body[data-theme="classic"] .comment-popover-hdr { color: #000000 !important; }
+    body[data-theme="classic"] .cp-user { color: #000080 !important; }
+
+    /* Session indicator */
+    body[data-theme="classic"] #session-indicator { color: #c8d8ff; }
+
+    /* Domain panel row */
+    body[data-theme="classic"] .domain-row { border-bottom-color: rgba(128,128,128,.4) !important; }
+    body[data-theme="classic"] .domain-panel-title { color: #000080 !important; }
+    body[data-theme="classic"] .domain-panel-hdr { border-bottom-color: #808080 !important; }
+
+    /* Client mode banner */
+    body[data-theme="classic"] .client-mode-banner {
+      background: rgba(128,0,128,.15) !important;
+      border-color: rgba(128,0,128,.4) !important;
+      color: #800080 !important;
+    }
+
+    /* Win95-style scrollbars (Webkit only) */
+    body[data-theme="classic"] ::-webkit-scrollbar       { width: 16px; height: 16px; }
+    body[data-theme="classic"] ::-webkit-scrollbar-track { background: #c0c0c0; }
+    body[data-theme="classic"] ::-webkit-scrollbar-thumb {
+      background: #c0c0c0;
+      border: 2px solid;
+      border-color: #ffffff #808080 #808080 #ffffff;
+    }
+    body[data-theme="classic"] ::-webkit-scrollbar-corner { background: #c0c0c0; }
+
+    /* ── Theme picker panel ─────────────────────────────────────────────── */
+    .theme-panel-list { display: flex; flex-direction: column; gap: 4px; }
+    .theme-opt { justify-content: flex-start !important; width: 100%; }
+    .theme-opt.primary { font-weight: 600 !important; }
+
+    /* ── Brightness slider ──────────────────────────────────────────────── */
+    .brightness-row {
+      margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+    }
+    .brightness-label {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .brightness-label span:last-child { font-weight: 400; font-size: 12px; letter-spacing: 0; text-transform: none; }
+    #brightness-slider { width: 100%; cursor: pointer; accent-color: var(--blue); display: block; }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       Theme: Professional  (clean light, client-ready)
+    ══════════════════════════════════════════════════════════════════════ */
+    body[data-theme="professional"] {
+      --bg:          #f5f5f7;
+      --surface:     #ffffff;
+      --surface2:    #f0f0f5;
+      --surface3:    #e5e5ea;
+      --border:      #d1d1d6;
+      --border2:     #a1a1aa;
+      --text:        #1c1c1e;
+      --text-muted:  #6e6e73;
+      --green:       #1a9e3f;
+      --green-dim:   rgba(26,158,63,.14);
+      --red:         #c0392b;
+      --red-dim:     rgba(192,57,43,.14);
+      --yellow:      #d4710a;
+      --yellow-dim:  rgba(212,113,10,.14);
+      --blue:        #0060df;
+      --blue-dim:    rgba(0,96,223,.10);
+      --purple:      #6a3bbf;
+      --purple-dim:  rgba(106,59,191,.10);
+      --font-mono:   'Consolas', 'Cascadia Code', 'Courier New', monospace;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+    body[data-theme="professional"] header {
+      background: linear-gradient(90deg, #003fa3 0%, #0060df 100%);
+      border-bottom: 1px solid #003090;
+    }
+    body[data-theme="professional"] .brand-logo {
+      background: rgba(255,255,255,.2) !important;
+      border-color: rgba(255,255,255,.4) !important;
+      color: #ffffff !important;
+    }
+    body[data-theme="professional"] .brand-text h1   { color: #ffffff !important; font-weight: 700; }
+    body[data-theme="professional"] .brand-text .subtitle { color: rgba(255,255,255,.75) !important; }
+    body[data-theme="professional"] .header-badge {
+      background: rgba(255,255,255,.2) !important;
+      border-color: rgba(255,255,255,.3) !important;
+      color: rgba(255,255,255,.9) !important;
+    }
+    body[data-theme="professional"] #session-indicator { color: rgba(255,255,255,.85); }
+    body[data-theme="professional"] .dot { background: rgba(255,255,255,.35); }
+    body[data-theme="professional"] .dot.on { background: #4ade80; }
+    body[data-theme="professional"] .btn {
+      background: #ffffff; border-color: var(--border2); color: var(--text);
+    }
+    body[data-theme="professional"] .btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+    body[data-theme="professional"] .btn.primary { background: var(--blue) !important; border-color: var(--blue) !important; color: #ffffff !important; }
+    body[data-theme="professional"] .btn.primary:hover { background: #004fc0 !important; }
+    body[data-theme="professional"] .btn.danger { border-color: var(--red); color: var(--red); }
+    body[data-theme="professional"] .btn.danger:hover { background: var(--red-dim); }
+    body[data-theme="professional"] .client-btn { border-color: var(--purple) !important; color: var(--purple) !important; }
+    body[data-theme="professional"] .client-btn.active { background: var(--purple) !important; color: #fff !important; }
+    body[data-theme="professional"] .client-chevron { border-color: var(--purple) !important; color: var(--purple) !important; }
+    body[data-theme="professional"] thead { background: #f0f0f5; }
+    body[data-theme="professional"] th { color: #374151; border-bottom-color: var(--border); }
+    body[data-theme="professional"] td { border-bottom-color: #e5e5ea; }
+    body[data-theme="professional"] tbody tr:hover td { background: rgba(0,96,223,.06) !important; }
+    body[data-theme="professional"] .pagination { background: var(--surface2); border-top-color: var(--border); color: var(--text-muted); }
+    body[data-theme="professional"] .table-wrap { background: var(--surface); border-color: var(--border); }
+    body[data-theme="professional"] .search-input { background: #ffffff; border-color: var(--border); color: var(--text); }
+    body[data-theme="professional"] .search-input:focus { border-color: var(--blue); }
+    body[data-theme="professional"] .toolbar select,
+    body[data-theme="professional"] .analysis-toolbar select,
+    body[data-theme="professional"] #per-page-sel,
+    body[data-theme="professional"] #hash-per-page-sel { background: #ffffff; color: var(--text); border-color: var(--border); }
+    body[data-theme="professional"] .drop-zone { background: #fafafa; border-color: var(--border2); }
+    body[data-theme="professional"] .drop-zone:hover,
+    body[data-theme="professional"] .drop-zone.drag-over { background: var(--blue-dim); border-color: var(--blue); }
+    body[data-theme="professional"] .drop-zone.loaded { border-color: var(--green); }
+    body[data-theme="professional"] .drop-zone p { color: var(--text-muted); }
+    body[data-theme="professional"] .modal,
+    body[data-theme="professional"] .hist-modal { background: #ffffff; border-color: var(--border2); }
+    body[data-theme="professional"] .modal textarea,
+    body[data-theme="professional"] .modal h3 { color: var(--text); }
+    body[data-theme="professional"] .hist-modal-hdr {
+      background: linear-gradient(90deg, #003fa3 0%, #0060df 100%);
+      border-bottom-color: #003090;
+    }
+    body[data-theme="professional"] .hist-modal-title { color: #ffffff !important; }
+    body[data-theme="professional"] .hist-modal-sub   { color: rgba(255,255,255,.8) !important; }
+    body[data-theme="professional"] .hist-modal-close { color: rgba(255,255,255,.8) !important; }
+    body[data-theme="professional"] .hist-card { background: var(--surface2); border-color: var(--border); }
+    body[data-theme="professional"] .hist-card.is-cracked { background: var(--green-dim); border-color: rgba(26,158,63,.3); }
+    body[data-theme="professional"] .hist-card.is-current { background: var(--blue-dim); border-color: rgba(0,96,223,.25); }
+    body[data-theme="professional"] .hist-timeline::before { background: var(--border2); }
+    body[data-theme="professional"] .hist-dot { background: var(--surface3); border-color: var(--border2); }
+    body[data-theme="professional"] .hist-dot.is-current { background: var(--blue); border-color: var(--blue); }
+    body[data-theme="professional"] .hist-dot.is-cracked { background: var(--green); border-color: var(--green); }
+    body[data-theme="professional"] .hf-copy { background: var(--surface2); border-color: var(--border2); color: var(--text-muted); }
+    body[data-theme="professional"] .domain-panel,
+    body[data-theme="professional"] .client-opts-panel { background: #ffffff; border-color: var(--border2); }
+    body[data-theme="professional"] .comment-popover { background: #ffffff; border-color: var(--border2); }
+    body[data-theme="professional"] .comment-popover textarea { background: #fafafa; border-color: var(--border); color: var(--text); }
+    body[data-theme="professional"] .tab-bar { border-bottom-color: var(--border); }
+    body[data-theme="professional"] .tab-btn { color: var(--text-muted); }
+    body[data-theme="professional"] .tab-btn:hover { color: var(--text); }
+    body[data-theme="professional"] .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+    body[data-theme="professional"] .toast { background: #ffffff; border-color: var(--border2); }
+    body[data-theme="professional"] .masks-table th { background: #f0f0f5; color: #374151; }
+    body[data-theme="professional"] .masks-table td { border-bottom-color: var(--border); }
+    body[data-theme="professional"] .masks-table tr:hover td { background: var(--blue-dim); }
+    body[data-theme="professional"] .mask-str { background: var(--surface2); border-color: var(--border); color: var(--blue); }
+    body[data-theme="professional"] .pw-cracked { color: var(--green); }
+    body[data-theme="professional"] .pw-none    { color: var(--red); }
+    body[data-theme="professional"] .hash-text  { color: var(--text-muted); }
+    body[data-theme="professional"] .pw-bar-fill  { background: var(--blue-dim) !important; border-left-color: var(--blue) !important; }
+    body[data-theme="professional"] .client-mode-banner { background: var(--purple-dim) !important; border-color: rgba(106,59,191,.3) !important; color: var(--purple) !important; }
+    body[data-theme="professional"] .badge-tier0 { background: var(--red-dim); color: var(--red); border-color: rgba(192,57,43,.35); }
+    body[data-theme="professional"] .hist-summary { background: var(--blue-dim); color: var(--blue); }
+    body[data-theme="professional"] .hist-summary.has-cracked { background: var(--green-dim); color: var(--green); }
+    body[data-theme="professional"] a { color: var(--blue); }
+
   </style>
 </head>
 <body>
@@ -897,6 +1412,29 @@ RETURN n</pre>
     </label>
     <button class="btn sm" id="btn-export-json" onclick="exportJSON()" disabled>Export JSON</button>
     <button class="btn sm danger" id="btn-clear" onclick="clearAll()" disabled>Clear All</button>
+    <div style="position:relative">
+      <button class="btn sm" id="btn-theme" onclick="toggleThemePanel(event)" title="Change colour theme">Theme ▾</button>
+      <div id="theme-panel" class="domain-panel hidden" style="min-width:148px;padding:12px 10px;right:0;left:auto">
+        <div class="domain-panel-hdr" style="margin-bottom:8px;padding-bottom:6px">
+          <span class="domain-panel-title">Theme</span>
+        </div>
+        <div class="theme-panel-list">
+          <button class="btn sm theme-opt" data-theme-option="dark"         onclick="setTheme('dark')">Dark</button>
+          <button class="btn sm theme-opt" data-theme-option="professional" onclick="setTheme('professional')">Professional</button>
+          <button class="btn sm theme-opt" data-theme-option="terminal"     onclick="setTheme('terminal')">Terminal</button>
+          <button class="btn sm theme-opt" data-theme-option="synthwave"    onclick="setTheme('synthwave')">Synthwave</button>
+          <button class="btn sm theme-opt" data-theme-option="classic"      onclick="setTheme('classic')">Classic</button>
+        </div>
+        <div class="brightness-row">
+          <div class="brightness-label">
+            <span>Brightness</span>
+            <span id="brightness-val">100%</span>
+          </div>
+          <input type="range" id="brightness-slider" min="50" max="150" value="100"
+                 oninput="setBrightness(this.value)">
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -1626,6 +2164,11 @@ function copyText(text) {
   toast('Copied', 'success', 1500);
 }
 
+function copyPw(idx) {
+  const u = _pageUsers[idx];
+  if (u && u.password) copyText(decodePw(u.password));
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Filtering & pagination
 ══════════════════════════════════════════════════════════════════════════ */
@@ -1791,9 +2334,10 @@ function renderTopPasswords(list) {
   const max = list[0].count;
   cont.innerHTML = list.map(({ password, count }) => {
     const barW = Math.round(count / max * 280);
+    const _dp  = decodePw(password);
     return `<div class="pw-bar-row">
       <div class="pw-bar-fill" style="width:${barW}px"></div>
-      <span class="pw-bar-label" title="${esc(password)}">${esc(password)}</span>
+      <span class="pw-bar-label" title="${esc(_dp)}">${esc(_dp)}</span>
       <span class="pw-bar-count">${count} user${count > 1 ? 's' : ''}</span>
     </div>`;
   }).join('');
@@ -2007,7 +2551,7 @@ function renderAnalysis(data) {
   document.getElementById('masks-tbody').innerHTML = data.masks.map((m, i) => {
     const pct  = Math.round(m.count / data.total * 100);
     const barW = Math.round(m.count / topCount * 90);
-    const examples = m.examples.map(e => `<span class="mask-example">${esc(e)}</span>`).join(', ');
+    const examples = m.examples.map(e => `<span class="mask-example">${esc(decodePw(e))}</span>`).join(', ');
     return `<tr>
       <td style="color:var(--text-muted);font-size:11px;width:28px">${i + 1}</td>
       <td><span class="pattern-str">${esc(m.pattern)}</span></td>
@@ -2147,7 +2691,6 @@ function renderHashesTable(users) {
   }
   tbody.innerHTML = users.map(u => {
     const srcLabel   = u.dump_source || '—';
-    const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
     const tier0Badge = u.is_tier0 ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
     const rowClass = [u.is_machine ? 'row-machine' : '', u.is_tier0 ? 'row-tier0' : ''].filter(Boolean).join(' ');
     return `<tr class="${rowClass}">
@@ -2158,7 +2701,7 @@ function renderHashesTable(users) {
       <td>${hashCol(u.aes128)}</td>
       <td>${hashCol(u.des)}</td>
       ${buildCommentCell(u)}
-      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);white-space:normal;word-break:break-word;max-width:160px">${esc(srcLabel)}</td>
     </tr>`;
   }).join('');
   updateHashSortArrows();
@@ -2191,7 +2734,7 @@ function renderHashesPagination(data) {
 /* ── Hash cell helper ─────────────────────────────────────────────── */
 function hashCell(h) {
   return `<span class="hash-text">${h}</span> `
-       + `<button class="copy-btn" onclick="copyText('${h}')">copy</button>`;
+       + `<button class="copy-btn" onclick="event.stopPropagation();copyText('${h}')">copy</button>`;
 }
 
 /* ── Current page users (for popup lookup) ───────────────────────── */
@@ -2224,11 +2767,12 @@ function renderTable(users) {
     let pwHtml;
     let pwLenCell = '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     if (u.password) {
+      const _pw = decodePw(u.password);
       const shared = (u.password_count || 1) > 1
         ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
-      pwHtml = `<span class="pw-cracked">${esc(u.password)}</span>${shared} `
-             + `<button class="copy-btn" onclick="event.stopPropagation();copyText(${JSON.stringify(u.password)})">copy</button>`;
-      pwLenCell = `<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${u.password.length}</td>`;
+      pwHtml = `<span class="pw-cracked">${esc(_pw)}</span>${shared} `
+             + `<button class="copy-btn" onclick="event.stopPropagation();copyPw(${i})">copy</button>`;
+      pwLenCell = `<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${_pw.length}</td>`;
     } else {
       const warn = histCracked.length > 0
         ? `<span class="badge-hist-warn" title="A previous password was cracked — click to view">hist cracked</span>`
@@ -2242,20 +2786,18 @@ function renderTable(users) {
       histHtml = '<span class="badge badge-machine">machine</span>';
     } else if (hasHist) {
       const cls = histCracked.length > 0 ? 'hist-summary has-cracked' : 'hist-summary';
-      const tip = `${histCracked.length} of ${history.length} historical passwords cracked — click row to view`;
-      histHtml = `<span class="${cls}" title="${tip}">⏱ ${histCracked.length}/${history.length} entries</span>`;
+      const tip = `${histCracked.length} of ${history.length} historical passwords cracked`;
+      histHtml = `<button class="${cls}" onclick="openHistoryModal(${i})" title="${tip}">⏱ ${histCracked.length}/${history.length}</button>`;
     }
 
-    const click = hasHist ? `onclick="openHistoryModal(${i})"` : '';
     const rowClass = [
-      hasHist ? 'row-has-history' : (u.is_machine ? 'row-machine' : ''),
+      u.is_machine ? 'row-machine' : '',
       u.is_tier0 ? 'row-tier0' : '',
     ].filter(Boolean).join(' ');
 
     const srcLabel = u.dump_source || '—';
-    const srcDisplay = srcLabel.length > 28 ? srcLabel.slice(0, 25) + '…' : srcLabel;
     const commentCell = buildCommentCell(u);
-    rows.push(`<tr class="${rowClass}" ${click}>
+    rows.push(`<tr class="${rowClass}">
       <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
@@ -2264,7 +2806,7 @@ function renderTable(users) {
       ${pwLenCell}
       <td>${histHtml}</td>
       ${commentCell}
-      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)" title="${esc(srcLabel)}">${esc(srcDisplay)}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);white-space:normal;word-break:break-word;max-width:160px">${esc(srcLabel)}</td>
     </tr>`);
   }
 
@@ -2283,6 +2825,13 @@ function updateSortArrows() {
    History detail popup
    Order: Current (top) → Previous (hist_0) → 2 changes ago → … → Oldest
 ══════════════════════════════════════════════════════════════════════════ */
+let _histPwCache = []; // index 0 = current pw, 1..N = sortedHist[pos-1] pw
+
+function copyHistPw(pos) {
+  const pw = _histPwCache[pos];
+  if (pw != null) copyText(pw);
+}
+
 function openHistoryModal(idx) {
   const u = _pageUsers[idx];
   if (!u) return;
@@ -2295,6 +2844,13 @@ function openHistoryModal(idx) {
   document.getElementById('hist-modal-sub').textContent =
     `RID: ${u.rid}  ·  ${history.length} history entr${history.length === 1 ? 'y' : 'ies'}`
     + (histCracked ? `  ·  ${histCracked} cracked` : '');
+
+  /* Build password cache: [0] = current, [1..N] = sortedHist by hist_index */
+  const sortedHist = [...history].sort((a, b) => a.hist_index - b.hist_index);
+  _histPwCache = [
+    u.password ? decodePw(u.password) : null,
+    ...sortedHist.map(h => h.password ? decodePw(h.password) : null),
+  ];
 
   let html = '<div class="hist-timeline">';
 
@@ -2313,8 +2869,8 @@ function openHistoryModal(idx) {
         <div class="hf">
           <span class="hf-lbl">Password</span>
           ${curCracked
-            ? `<span class="hf-val cracked">${esc(u.password)}</span>
-               <button class="hf-copy" onclick="copyText(${JSON.stringify(u.password)})">copy</button>`
+            ? `<span class="hf-val cracked">${esc(decodePw(u.password))}</span>
+               <button class="hf-copy" onclick="copyHistPw(0)">copy</button>`
             : `<span class="hf-val unknown">not cracked</span>`
           }
         </div>
@@ -2325,8 +2881,6 @@ function openHistoryModal(idx) {
   if (history.length === 0) {
     html += `<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No history entries in this dump.</div>`;
   } else {
-    /* Sort ascending: hist_0 (previous) first, hist_N (oldest) last */
-    const sortedHist = [...history].sort((a, b) => a.hist_index - b.hist_index);
     sortedHist.forEach((h, pos) => {
       const cracked     = !!h.password;
       const reused      = h.nt_hash === u.nt_hash;
@@ -2354,8 +2908,8 @@ function openHistoryModal(idx) {
             <div class="hf">
               <span class="hf-lbl">Password</span>
               ${cracked
-                ? `<span class="hf-val cracked">${esc(h.password)}</span>
-                   <button class="hf-copy" onclick="copyText(${JSON.stringify(h.password)})">copy</button>`
+                ? `<span class="hf-val cracked">${esc(decodePw(h.password))}</span>
+                   <button class="hf-copy" onclick="copyHistPw(${pos + 1})">copy</button>`
                 : `<span class="hf-val unknown">not cracked</span>`
               }
             </div>
@@ -2483,6 +3037,24 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/* Decode hashcat $HEX[...] encoded passwords to their actual string.
+   Hashcat uses this encoding for passwords containing non-ASCII or special chars. */
+function decodePw(pw) {
+  if (!pw) return pw;
+  const m = pw.match(/^\$HEX\[([0-9a-fA-F]*)\]$/i);
+  if (!m) return pw;
+  const hex = m[1];
+  if (hex.length % 2 !== 0) return pw;
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2)
+    bytes[i >>> 1] = parseInt(hex.slice(i, i + 2), 16);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return Array.from(bytes).map(b => String.fromCharCode(b)).join('');
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2868,8 +3440,66 @@ function setTier0Status(count, label) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Themes
+══════════════════════════════════════════════════════════════════════════ */
+const _THEME_LABELS = { dark: 'Dark', professional: 'Professional', terminal: 'Terminal', synthwave: 'Synthwave', classic: 'Classic' };
+let _currentTheme = localStorage.getItem('theme') || 'dark';
+
+function setTheme(name) {
+  _currentTheme = name;
+  if (name === 'dark') {
+    document.body.removeAttribute('data-theme');
+  } else {
+    document.body.setAttribute('data-theme', name);
+  }
+  localStorage.setItem('theme', name);
+  _applyThemeUI();
+  document.getElementById('theme-panel').classList.add('hidden');
+}
+
+function setBrightness(val) {
+  val = parseInt(val);
+  document.body.style.filter = val === 100 ? '' : `brightness(${val}%)`;
+  const el = document.getElementById('brightness-val');
+  if (el) el.textContent = val + '%';
+  localStorage.setItem('brightness', val);
+}
+
+function toggleThemePanel(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('theme-panel').classList.toggle('hidden');
+}
+
+function _applyThemeUI() {
+  const btn = document.getElementById('btn-theme');
+  if (btn) btn.textContent = (_THEME_LABELS[_currentTheme] || 'Theme') + ' ▾';
+  document.querySelectorAll('.theme-opt').forEach(el => {
+    el.classList.toggle('primary', el.getAttribute('data-theme-option') === _currentTheme);
+  });
+}
+
+document.addEventListener('click', e => {
+  const panel = document.getElementById('theme-panel');
+  const btn   = document.getElementById('btn-theme');
+  if (panel && !panel.classList.contains('hidden') &&
+      !panel.contains(e.target) && e.target !== btn) {
+    panel.classList.add('hidden');
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
    Boot
 ══════════════════════════════════════════════════════════════════════════ */
+// Apply saved theme before first paint
+if (_currentTheme !== 'dark') document.body.setAttribute('data-theme', _currentTheme);
+_applyThemeUI();
+
+// Apply saved brightness
+const _savedBrightness = parseInt(localStorage.getItem('brightness') || '100');
+if (_savedBrightness !== 100) setBrightness(_savedBrightness);
+{ const sl = document.getElementById('brightness-slider'); if (sl) sl.value = _savedBrightness; }
+{ const bv = document.getElementById('brightness-val'); if (bv) bv.textContent = _savedBrightness + '%'; }
+
 initSession();
 applyClientMode();
 </script>
