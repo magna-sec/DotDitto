@@ -2444,9 +2444,10 @@ function analysisFilterChanged() {
 async function loadAnalysis() {
   try {
     const params = new URLSearchParams({ domain: analysisState.domain, source: analysisState.source, ...excludeParam() });
+    const domainParams = new URLSearchParams(excludeParam());
     const [data, domains] = await Promise.all([
       api('GET', `/api/analysis?${params}`),
-      api('GET', '/api/analysis/domains'),
+      api('GET', `/api/analysis/domains${domainParams.toString() ? '?' + domainParams : ''}`),
     ]);
     _analysisData = data;
     renderAnalysis(data);
@@ -2475,55 +2476,59 @@ function renderDomainSummary(domains) {
 
 async function exportAnalysisReport() {
   try {
-    const domains = await api('GET', '/api/analysis/domains');
+    const domainParams = new URLSearchParams(excludeParam());
+    const domains = await api('GET', `/api/analysis/domains${domainParams.toString() ? '?' + domainParams : ''}`);
     const d = _analysisData;
     if (!d) { toast('No analysis data available', 'error'); return; }
 
-    const lines = [];
-    lines.push('=== DotDitto Analysis Report ===');
-    lines.push('');
+    const csvRow = (...cells) => cells.map(c => {
+      const s = String(c ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',');
+
+    const rows = [];
+
+    rows.push(csvRow('Section', 'Field', 'Value', 'Extra'));
+    rows.push('');
 
     // Per-domain summary
-    lines.push('--- Per-Domain Summary ---');
-    lines.push(`${'Domain'.padEnd(40)}  ${'Accounts'.padStart(8)}  ${'Cracked'.padStart(8)}  ${'Rate'.padStart(6)}`);
-    lines.push('-'.repeat(70));
+    rows.push(csvRow('Domain Summary', 'Domain', 'Accounts', 'Cracked', 'Crack Rate'));
     for (const dom of domains) {
-      lines.push(`${dom.domain.padEnd(40)}  ${String(dom.total).padStart(8)}  ${String(dom.cracked).padStart(8)}  ${String(dom.crack_rate + '%').padStart(6)}`);
+      rows.push(csvRow('', dom.domain, dom.total, dom.cracked, dom.crack_rate + '%'));
     }
-    lines.push('');
+    rows.push('');
 
     // Top words
-    lines.push('--- Top Words (top 15) ---');
+    rows.push(csvRow('Top Words', 'Word', 'Count'));
     (d.top_words || []).slice(0, 15).forEach(({ word, count }) => {
-      lines.push(`  ${word.padEnd(30)}  ${count}`);
+      rows.push(csvRow('', word, count));
     });
-    lines.push('');
+    rows.push('');
 
     // Top prefixes
-    lines.push('--- Top Prefixes (top 15) ---');
+    rows.push(csvRow('Top Prefixes', 'Prefix', 'Count'));
     (d.top_prefixes || []).slice(0, 15).forEach(({ prefix, count }) => {
-      lines.push(`  ${prefix.padEnd(30)}  ${count}`);
+      rows.push(csvRow('', prefix, count));
     });
-    lines.push('');
+    rows.push('');
 
     // Top suffixes
-    lines.push('--- Top Suffixes (top 15) ---');
+    rows.push(csvRow('Top Suffixes', 'Suffix', 'Count'));
     (d.top_suffixes || []).slice(0, 15).forEach(({ suffix, count }) => {
-      lines.push(`  ${suffix.padEnd(30)}  ${count}`);
+      rows.push(csvRow('', suffix, count));
     });
-    lines.push('');
+    rows.push('');
 
-    // Common password lengths
-    lines.push('--- Password Length Distribution ---');
+    // Length distribution
+    rows.push(csvRow('Length Distribution', 'Length', 'Count'));
     (d.lengths || []).forEach(({ length, count }) => {
-      lines.push(`  Length ${String(length).padStart(3)}:  ${count}`);
+      rows.push(csvRow('', length, count));
     });
-    lines.push('');
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const blob = new Blob([rows.join('\r\n')], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = 'dotditto_analysis.txt';
+    a.href = url; a.download = 'dotditto_analysis.csv';
     a.click();
     URL.revokeObjectURL(url);
     toast('Analysis report downloaded', 'success');

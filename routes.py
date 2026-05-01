@@ -351,10 +351,14 @@ def import_json():
 
 @bp.route("/api/analysis/domains")
 def get_domain_analysis():
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     users = session.get("users", [])
     domains = {}
     for u in users:
         if u["is_history"] or u["is_machine"]:
+            continue
+        if excluded and u["domain"] in excluded:
             continue
         d = u["domain"]
         if d not in domains:
