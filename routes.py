@@ -349,6 +349,32 @@ def import_json():
     )
 
 
+@bp.route("/api/analysis/domains")
+def get_domain_analysis():
+    users = session.get("users", [])
+    domains = {}
+    for u in users:
+        if u["is_history"] or u["is_machine"]:
+            continue
+        d = u["domain"]
+        if d not in domains:
+            domains[d] = {"total": 0, "cracked": 0}
+        domains[d]["total"] += 1
+        if u["password"]:
+            domains[d]["cracked"] += 1
+    result = []
+    for domain, stats in sorted(domains.items()):
+        total = stats["total"]
+        cracked = stats["cracked"]
+        result.append({
+            "domain": domain,
+            "total": total,
+            "cracked": cracked,
+            "crack_rate": round(cracked / total * 100, 1) if total else 0.0
+        })
+    return jsonify(result)
+
+
 @bp.route("/api/export/csv")
 def export_csv():
     exclude_raw = request.args.get("exclude_domains", "")
@@ -362,6 +388,7 @@ def export_csv():
         show_history    = request.args.get("show_history", "false") == "true",
         show_machines   = request.args.get("show_machines", "true") == "true",
         exclude_domains = excluded or None,
+        tier0_only      = request.args.get("tier0_only", "false") == "true",
     )
     buf = io.StringIO()
     w = csv.writer(buf)

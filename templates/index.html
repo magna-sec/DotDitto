@@ -203,6 +203,10 @@
       height: 18px; border-radius: 3px; background: var(--yellow-dim);
       border-left: 3px solid var(--yellow); min-width: 4px; flex-shrink: 0;
     }
+    .suffix-bar-fill {
+      height: 18px; border-radius: 3px; background: var(--red-dim);
+      border-left: 3px solid var(--red); min-width: 4px; flex-shrink: 0;
+    }
 
     /* ── Toolbar ─────────────────────────────────────────────────────── */
     .toolbar {
@@ -424,8 +428,9 @@
     }
     .len-lbl { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
 
-    /* Top words / prefixes */
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    /* Top words / prefixes / suffixes */
+    .two-col   { display: grid; grid-template-columns: 1fr 1fr;          gap: 16px; margin-bottom: 20px; }
+    .three-col { display: grid; grid-template-columns: repeat(3, 1fr);   gap: 14px; margin-bottom: 20px; }
     .mini-card {
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: 7px; padding: 14px;
@@ -1329,6 +1334,9 @@
   </div>
 </div>
 
+<!-- ─── Page wrap (brightness filter target — keeps fixed overlays unaffected) ── -->
+<div id="page-wrap">
+
 <!-- ─── Header ───────────────────────────────────────────────────────────── -->
 <header>
   <div class="header-brand">
@@ -1428,7 +1436,12 @@ RETURN n</pre>
         <div class="brightness-row">
           <div class="brightness-label">
             <span>Brightness</span>
-            <span id="brightness-val">100%</span>
+            <span style="display:flex;align-items:center;gap:6px;">
+              <span id="brightness-val">100%</span>
+              <button onclick="resetBrightness()" title="Reset to 100%"
+                style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;padding:0;line-height:1;"
+              >↺</button>
+            </span>
           </div>
           <input type="range" id="brightness-slider" min="50" max="150" value="100"
                  oninput="setBrightness(this.value)">
@@ -1726,6 +1739,21 @@ RETURN n</pre>
         <span class="analysis-scope-info" id="analysis-scope-info"></span>
       </div>
 
+      <!-- Per-domain summary (only shown when multiple domains) -->
+      <div id="domain-summary-section" class="analysis-card hidden" style="padding:14px 18px;margin-bottom:16px;">
+        <table class="masks-table" style="min-width:0">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th style="text-align:right">Accounts</th>
+              <th style="text-align:right">Cracked</th>
+              <th style="text-align:right">Rate</th>
+            </tr>
+          </thead>
+          <tbody id="domain-summary-tbody"></tbody>
+        </table>
+      </div>
+
       <div class="analysis-card">
         <div class="analysis-hdr">
           <div>
@@ -1735,6 +1763,7 @@ RETURN n</pre>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn sm client-hide" onclick="exportWordlist()" title="Download all cracked passwords as a wordlist">Export Wordlist</button>
             <button class="btn sm client-hide" onclick="exportWordWordlist()" title="Download most-used word tokens as a wordlist">Export Word List</button>
+            <button class="btn sm" onclick="exportAnalysisReport()" title="Download a plain-text analysis report">Export Analysis Report</button>
           </div>
         </div>
 
@@ -1758,8 +1787,8 @@ RETURN n</pre>
         <div class="len-section-lbl">Length Distribution</div>
         <div class="length-chart" id="length-chart"></div>
 
-        <!-- Top words & prefixes -->
-        <div class="two-col" id="words-prefixes-section">
+        <!-- Top words, prefixes & suffixes -->
+        <div class="three-col" id="words-prefixes-section">
           <div class="mini-card">
             <h4>Top Words in Passwords</h4>
             <div id="top-words-list"></div>
@@ -1767,6 +1796,10 @@ RETURN n</pre>
           <div class="mini-card">
             <h4>Top Prefixes</h4>
             <div id="top-prefixes-list"></div>
+          </div>
+          <div class="mini-card">
+            <h4>Top Suffixes</h4>
+            <div id="top-suffixes-list"></div>
           </div>
         </div>
 
@@ -1816,6 +1849,8 @@ RETURN n</pre>
   </div>
 
 </main>
+
+</div><!-- /page-wrap -->
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2409,11 +2444,91 @@ function analysisFilterChanged() {
 async function loadAnalysis() {
   try {
     const params = new URLSearchParams({ domain: analysisState.domain, source: analysisState.source, ...excludeParam() });
-    const data = await api('GET', `/api/analysis?${params}`);
+    const [data, domains] = await Promise.all([
+      api('GET', `/api/analysis?${params}`),
+      api('GET', '/api/analysis/domains'),
+    ]);
     _analysisData = data;
     renderAnalysis(data);
+    renderDomainSummary(domains);
   } catch (err) {
     console.error('analysis error', err);
+  }
+}
+
+function renderDomainSummary(domains) {
+  const section = document.getElementById('domain-summary-section');
+  if (!domains || domains.length <= 1) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+  document.getElementById('domain-summary-tbody').innerHTML = domains.map(d =>
+    `<tr>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--blue)">${esc(d.domain)}</td>
+      <td style="text-align:right;color:var(--text-muted)">${d.total.toLocaleString()}</td>
+      <td style="text-align:right;color:var(--green)">${d.cracked.toLocaleString()}</td>
+      <td style="text-align:right;color:var(--yellow)">${d.crack_rate}%</td>
+    </tr>`
+  ).join('');
+}
+
+async function exportAnalysisReport() {
+  try {
+    const domains = await api('GET', '/api/analysis/domains');
+    const d = _analysisData;
+    if (!d) { toast('No analysis data available', 'error'); return; }
+
+    const lines = [];
+    lines.push('=== DotDitto Analysis Report ===');
+    lines.push('');
+
+    // Per-domain summary
+    lines.push('--- Per-Domain Summary ---');
+    lines.push(`${'Domain'.padEnd(40)}  ${'Accounts'.padStart(8)}  ${'Cracked'.padStart(8)}  ${'Rate'.padStart(6)}`);
+    lines.push('-'.repeat(70));
+    for (const dom of domains) {
+      lines.push(`${dom.domain.padEnd(40)}  ${String(dom.total).padStart(8)}  ${String(dom.cracked).padStart(8)}  ${String(dom.crack_rate + '%').padStart(6)}`);
+    }
+    lines.push('');
+
+    // Top words
+    lines.push('--- Top Words (top 15) ---');
+    (d.top_words || []).slice(0, 15).forEach(({ word, count }) => {
+      lines.push(`  ${word.padEnd(30)}  ${count}`);
+    });
+    lines.push('');
+
+    // Top prefixes
+    lines.push('--- Top Prefixes (top 15) ---');
+    (d.top_prefixes || []).slice(0, 15).forEach(({ prefix, count }) => {
+      lines.push(`  ${prefix.padEnd(30)}  ${count}`);
+    });
+    lines.push('');
+
+    // Top suffixes
+    lines.push('--- Top Suffixes (top 15) ---');
+    (d.top_suffixes || []).slice(0, 15).forEach(({ suffix, count }) => {
+      lines.push(`  ${suffix.padEnd(30)}  ${count}`);
+    });
+    lines.push('');
+
+    // Common password lengths
+    lines.push('--- Password Length Distribution ---');
+    (d.lengths || []).forEach(({ length, count }) => {
+      lines.push(`  Length ${String(length).padStart(3)}:  ${count}`);
+    });
+    lines.push('');
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'dotditto_analysis.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Analysis report downloaded', 'success');
+  } catch (err) {
+    toast(`Export error: ${err.message}`, 'error');
   }
 }
 
@@ -2540,6 +2655,20 @@ function renderAnalysis(data) {
         return `<div class="mini-bar-row">
           <div class="prefix-bar-fill" style="width:${barW}px"></div>
           <span class="mini-bar-label" style="color:var(--yellow)" title="${esc(prefix)}">${esc(prefix)}</span>
+          <span class="mini-bar-count">${count}</span>
+        </div>`;
+      }).join('');
+
+  /* ── Top suffixes ── */
+  const sufList  = data.top_suffixes || [];
+  const maxSuf   = sufList.length ? sufList[0].count : 1;
+  document.getElementById('top-suffixes-list').innerHTML = sufList.length === 0
+    ? '<div style="color:var(--text-muted);font-size:12px;">No suffixes found</div>'
+    : sufList.slice(0, 15).map(({ suffix, count }) => {
+        const barW = Math.round(count / maxSuf * 120);
+        return `<div class="mini-bar-row">
+          <div class="suffix-bar-fill" style="width:${barW}px"></div>
+          <span class="mini-bar-label" style="color:var(--red)" title="${esc(suffix)}">${esc(suffix)}</span>
           <span class="mini-bar-count">${count}</span>
         </div>`;
       }).join('');
@@ -3457,10 +3586,17 @@ function setTheme(name) {
 
 function setBrightness(val) {
   val = parseInt(val);
-  document.body.style.filter = val === 100 ? '' : `brightness(${val}%)`;
+  const wrap = document.getElementById('page-wrap');
+  if (wrap) wrap.style.filter = val === 100 ? '' : `brightness(${val}%)`;
   const el = document.getElementById('brightness-val');
   if (el) el.textContent = val + '%';
   localStorage.setItem('brightness', val);
+}
+
+function resetBrightness() {
+  setBrightness(100);
+  const sl = document.getElementById('brightness-slider');
+  if (sl) sl.value = 100;
 }
 
 function toggleThemePanel(e) {
@@ -3494,7 +3630,10 @@ _applyThemeUI();
 
 // Apply saved brightness
 const _savedBrightness = parseInt(localStorage.getItem('brightness') || '100');
-if (_savedBrightness !== 100) setBrightness(_savedBrightness);
+if (_savedBrightness !== 100) {
+  const _pw = document.getElementById('page-wrap');
+  if (_pw) _pw.style.filter = `brightness(${_savedBrightness}%)`;
+}
 { const sl = document.getElementById('brightness-slider'); if (sl) sl.value = _savedBrightness; }
 { const bv = document.getElementById('brightness-val'); if (bv) bv.textContent = _savedBrightness + '%'; }
 

@@ -72,6 +72,14 @@ def extract_prefix(password: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
+def extract_suffix(password: str) -> str | None:
+    """Return the trailing non-alpha (digits+specials) segment, or None if < 2 chars."""
+    m = re.search(r"([^a-zA-Z]+)$", password)
+    if m and len(m.group(1)) >= 2:
+        return m.group(1)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Full analysis
 # ---------------------------------------------------------------------------
@@ -94,6 +102,7 @@ def run_analysis(cracked_passwords: list[str]) -> dict:
             "char_classes": {},
             "top_words": [],
             "top_prefixes": [],
+            "top_suffixes": [],
             "complexity": {},
             "reuse": {
                 "unique_passwords": 0,
@@ -171,6 +180,18 @@ def run_analysis(cracked_passwords: list[str]) -> dict:
         for p, c in prefix_counter.most_common(20)
     ]
 
+    # ── Top suffixes ─────────────────────────────────────────────────────
+    suffix_counter: Counter = Counter()
+    for pw in cracked_passwords:
+        s = extract_suffix(pw)
+        if s:
+            suffix_counter[s] += 1
+
+    top_suffixes = [
+        {"suffix": s, "count": c}
+        for s, c in suffix_counter.most_common(20)
+    ]
+
     # ── Complexity breakdown ────────────────────────────────────────────────
     def complexity_class(pw: str) -> str:
         has_upper   = any(c.isupper() for c in pw)
@@ -246,6 +267,7 @@ def run_analysis(cracked_passwords: list[str]) -> dict:
         "char_classes": char_classes,
         "top_words":    top_words,
         "top_prefixes": top_prefixes,
+        "top_suffixes": top_suffixes,
         "complexity":   complexity,
         "reuse":        reuse,
         "year_pct":     year_pct,
