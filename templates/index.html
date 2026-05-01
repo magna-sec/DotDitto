@@ -1449,7 +1449,6 @@ RETURN n</pre>
       <div class="upload-card-header">
         <span class="dot" id="dot-dump2"></span>
         <h3>secretsdump Output</h3>
-        <span class="source-tag hidden" id="dump-source-tag"></span>
       </div>
       <div class="drop-zone" id="dump-drop-zone"
            onclick="document.getElementById('dump-file-input').click()"
@@ -1457,7 +1456,7 @@ RETURN n</pre>
            ondragleave="onDragLeave('dump-drop-zone')"
            ondrop="onDropDump(event)">
         <p id="dump-drop-text">Drop file here or click to browse</p>
-        <p class="hint">Accepts any text file — supports -history output</p>
+        <p class="hint" id="dump-hint">Accepts any text file — supports -history output</p>
       </div>
       <input type="file" id="dump-file-input">
       <div class="upload-actions">
@@ -1471,7 +1470,6 @@ RETURN n</pre>
       <div class="upload-card-header">
         <span class="dot" id="dot-pot2"></span>
         <h3>Hashcat Pot File(s)</h3>
-        <span class="source-tag hidden" id="pot-source-tag"></span>
       </div>
       <div class="drop-zone" id="pot-drop-zone"
            onclick="document.getElementById('pot-file-input').click()"
@@ -1479,7 +1477,7 @@ RETURN n</pre>
            ondragleave="onDragLeave('pot-drop-zone')"
            ondrop="onDropPot(event)">
         <p id="pot-drop-text">Drop file(s) here or click to browse</p>
-        <p class="hint">Format: <span style="font-family:monospace">NTLMHASH:password</span> or <span style="font-family:monospace">$NT$HASH:password</span></p>
+        <p class="hint" id="pot-hint">Format: <span style="font-family:monospace">NTLMHASH:password</span> or <span style="font-family:monospace">$NT$HASH:password</span></p>
       </div>
       <input type="file" id="pot-file-input" multiple>
       <div class="upload-actions">
@@ -2983,16 +2981,16 @@ function setDumpStatus(on, label) {
     document.getElementById(id).classList.toggle('on', on);
   });
   document.getElementById('lbl-dump').textContent = on ? `Dump: ${label}` : 'No dump loaded';
-  const tag = document.getElementById('dump-source-tag');
+  const zone = document.getElementById('dump-drop-zone');
+  const hint = document.getElementById('dump-hint');
   if (on) {
-    tag.textContent = label;
-    tag.classList.remove('hidden');
-    document.getElementById('dump-drop-zone').classList.add('loaded');
-    document.getElementById('dump-drop-text').textContent = '✓ ' + label;
+    zone.classList.add('loaded');
+    document.getElementById('dump-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — click to replace</span>';
+    if (hint) hint.style.display = 'none';
   } else {
-    tag.classList.add('hidden');
-    document.getElementById('dump-drop-zone').classList.remove('loaded');
+    zone.classList.remove('loaded');
     document.getElementById('dump-drop-text').textContent = 'Drop file here or click to browse';
+    if (hint) hint.style.display = '';
   }
 }
 
@@ -3001,16 +2999,16 @@ function setPotStatus(on, label) {
     document.getElementById(id).classList.toggle('on', on);
   });
   document.getElementById('lbl-pot').textContent = on ? `Pot: ${label}` : 'No pot loaded';
-  const tag = document.getElementById('pot-source-tag');
+  const zone = document.getElementById('pot-drop-zone');
+  const hint = document.getElementById('pot-hint');
   if (on) {
-    tag.textContent = label;
-    tag.classList.remove('hidden');
-    document.getElementById('pot-drop-zone').classList.add('loaded');
-    document.getElementById('pot-drop-text').textContent = '✓ ' + label;
+    zone.classList.add('loaded');
+    document.getElementById('pot-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — click to replace</span>';
+    if (hint) hint.style.display = 'none';
   } else {
-    tag.classList.add('hidden');
-    document.getElementById('pot-drop-zone').classList.remove('loaded');
+    zone.classList.remove('loaded');
     document.getElementById('pot-drop-text').textContent = 'Drop file(s) here or click to browse';
+    if (hint) hint.style.display = '';
   }
 }
 

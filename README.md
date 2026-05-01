@@ -7,23 +7,28 @@
 
 ## Features
 
-- **NTDS dump ingestion** — file upload or paste; supports secretsdump `-history` output
+- **NTDS dump ingestion** — file upload or paste; supports secretsdump `-history` output; each dump can be tagged with a source label (DC hostname) for deduplication and filtering
 - **Hashcat pot file support** — load one or more pot files (`HASH:plain` or `$NT$HASH:plain`)
-- **Multi-domain sessions** — load dumps from multiple domains simultaneously; each gets its own tab
+- **Multi-domain sessions** — load dumps from multiple domains simultaneously; filter by domain across all views
 - **Domain visibility management** — show/hide individual domains from all stats and charts
 - **Domain comparison** — side-by-side crack rate and account stats across any combination of domains
-- **Password history timeline** — per-account modal showing current → previous passwords (most recent first)
-- **Shared password detection** — highlights accounts sharing the same plaintext
-- **Three-tab layout per domain**
-  - **Overview** — stats strip, top passwords chart, sortable/filterable user table
+- **Password history timeline** — click the history button (⏱) in the History column to open a per-account modal showing current → previous passwords, oldest to newest
+- **Shared password detection** — highlights accounts sharing the same plaintext with a reuse badge
+- **Password length column** — displays character count for each cracked password; sortable
+- **"hist cracked" warning** — yellow badge on rows where the current hash is uncracked but a historical password was cracked
+- **Three-tab layout**
+  - **Overview** — stats strip, domain comparison, top passwords chart, sortable/filterable user table with copy buttons for hashes and passwords
   - **All Hashes** — per-user NT (RC4), AES-256, AES-128, and DES Kerberos keys with one-click copy
-  - **Analysis** — character-class breakdown, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
-- **Overall tab** — aggregate stats and crack rate across all loaded domains
-- **Client Mode** — blurs sensitive data for client-facing demos; independently toggle hiding of passwords/hashes and/or usernames
+  - **Analysis** — character-class breakdown, password reuse stats, complexity buckets, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
+- **Tier-0 user tracking** — load a list of privileged accounts (file, paste, or BloodHound Cypher query); matching rows are flagged with a `T0` badge and a red left border; filter the table to tier-0 accounts only
+- **Per-row notes** — click any Notes cell to attach a free-text annotation to an account (e.g. `SNOW Admin`, `Has 2 VDIs`); notes are saved in the session
+- **Client Mode** — blurs sensitive data for client-facing screen shares; independently toggle hiding of passwords/hashes and/or usernames
+- **Themes** — Dark (default), Professional (clean light), Terminal (green phosphor), Synthwave (retro neon), Classic (Windows 95)
+- **Brightness slider** — fine-tune display brightness across any theme; setting is saved between sessions
 - **Wordlist exports**
   - All unique cracked passwords as a plain-text wordlist (`.txt`)
   - Most-common word tokens extracted from cracked passwords
-- **CSV / JSON export** — export filtered table as CSV or full session as JSON
+- **CSV / JSON export** — export filtered table as CSV or full session as JSON (re-importable)
 - **Copy uncracked hashes** — one-click copy of all uncracked NT hashes for hashcat
 - **Session persistence** — auto-saves each domain to `sessions/<domain>.json` (excluded from git)
 - **Fully offline** — binds to `127.0.0.1:5000` only; no external requests, no telemetry
@@ -66,7 +71,7 @@ secretsdump.py -ntds ntds.dit -system SYSTEM -hashes lmhash:nthash LOCAL -histor
 secretsdump.py DOMAIN/user:pass@dc.corp.local -history
 ```
 
-Drag and drop the output file onto the **secretsdump Output** zone, or click **Paste text**. A source label (e.g. DC hostname) can be optionally set before uploading — this appears in the Source column and is used for deduplication if you reload the same DC.
+Drag and drop the output file onto the **secretsdump Output** zone, or click **Paste text**. A source label (e.g. DC hostname) can be set before uploading — it appears in the Source column and allows filtering by DC if you load multiple dumps.
 
 Supported formats parsed automatically:
 
@@ -102,32 +107,39 @@ $NT$8846f7eaee8fb117ad06bdd830b7586c:Password1
 
 ## Multi-Domain Support
 
-DotDitto supports loading dumps from multiple domains in a single session. Each domain gets its own tab. Domains are inferred automatically from the `DOMAIN\username` format in the dump.
+DotDitto supports loading dumps from multiple domains in a single session. Domains are inferred automatically from the `DOMAIN\username` format in the dump.
 
-- The **Overall** tab shows aggregate stats across all loaded domains
-- **Domains ▾** in the header lets you hide specific domains from all stats and charts (useful for excluding machine-account-heavy domains from analysis)
+- The **Overview** tab shows aggregate stats across all domains by default; use the **Domain** filter dropdown to scope any view to a single domain
+- **Domains ▾** in the header lets you hide specific domains from all stats and charts (useful for excluding machine-account-heavy domains)
 - The **Domain Comparison** panel (Overview tab, appears when ≥ 2 domains are loaded) shows crack rates and account counts side-by-side for any selected domains
 
 Sessions are persisted to `sessions/<domain>.json` and reloaded automatically on start.
 
 ---
 
-## Exporting
+## Tier-0 Tracking
 
-| Action | Description |
-|--------|-------------|
-| **Export Wordlist** | All unique cracked passwords, one per line (`.txt`) |
-| **Export Word Tokens** | Most-common word tokens extracted from cracked passwords (`.txt`) |
-| **Export CSV** | Current filtered table as a flat CSV |
-| **Export JSON** | Full session snapshot (dump + pot hashes), re-importable |
-| **Export .hcmask** | Top mask patterns ready for `hashcat -a 3` |
-| **Copy Uncracked Hashes** | Unique uncracked NT hashes to clipboard |
+Click **Tier 0 ▾** in the header to open the Tier-0 panel. Load a list of privileged accounts by:
+
+- **Upload file** — a plain text file, one entry per line
+- **Paste text** — paste a list directly
+- **BloodHound Cypher query** — the panel includes a ready-made query to copy into BloodHound to export your Tier 0 users
+
+Expected format (one entry per line):
+
+```
+administrator@corp.local
+krbtgt@corp.local
+svc-backup@corp.local
+```
+
+Once loaded, matching accounts are flagged with a red `T0` badge in the Username column. Use the **Tier 0 only** filter in the toolbar to scope the table to privileged accounts.
 
 ---
 
 ## Password History
 
-Click any row showing a history badge to open the timeline modal. Entries are displayed most-recent first:
+Click the **⏱ n/m** button in the History column to open the timeline modal for that account. Entries are displayed most-recent first:
 
 ```
   ● Current password
@@ -136,6 +148,16 @@ Click any row showing a history badge to open the timeline modal. Entries are di
   ○ 2 changes ago     (history index 1)
   ○ Oldest            (history index N)
 ```
+
+Each entry shows the NT hash and cracked password (if available) with a one-click copy button. Reused hashes are flagged with a warning badge.
+
+If a row has no current password cracked but a historical one was, a yellow **hist cracked** badge appears in the Password column.
+
+---
+
+## Notes
+
+Click any cell in the **Notes** column to attach a free-text annotation to an account. Notes are saved as part of the session and exported in JSON exports.
 
 ---
 
@@ -152,15 +174,45 @@ Both options can be toggled independently. Preferences are saved to `localStorag
 
 ---
 
+## Themes & Brightness
+
+Click **Theme ▾** in the header to switch themes:
+
+| Theme | Description |
+|-------|-------------|
+| **Dark** | Default dark mode (GitHub-style) |
+| **Professional** | Clean light UI with blue header — suitable for client-facing screens |
+| **Terminal** | Green phosphor on black |
+| **Synthwave** | Retro 80s neon purple |
+| **Classic** | Windows 95 era — raised 3D panels, teal desktop |
+
+Use the **Brightness** slider in the same panel to fine-tune display brightness from 50% to 150%. The selected theme and brightness level are saved to `localStorage`.
+
+---
+
+## Exporting
+
+| Action | Description |
+|--------|-------------|
+| **Export Wordlist** | All unique cracked passwords, one per line (`.txt`) |
+| **Export Word Tokens** | Most-common word tokens extracted from cracked passwords (`.txt`) |
+| **Export CSV** | Current filtered table as a flat CSV |
+| **Export JSON** | Full session snapshot (dump + pot hashes + notes), re-importable via **Import JSON** |
+| **Export .hcmask** | Top mask patterns ready for `hashcat -a 3` |
+| **Copy Uncracked Hashes** | Unique uncracked NT hashes to clipboard |
+
+---
+
 ## Mask Analysis
 
 The **Analysis** tab shows:
 
 - Character-class presence rates (uppercase, lowercase, digits, special)
+- Password reuse stats (unique count, % sharing, max reuse, % containing a year)
+- Complexity breakdown by number of character classes used
 - Password length distribution chart
 - Top 30 hashcat mask patterns ranked by frequency with example passwords
-- Top word tokens found in cracked passwords
-- Top common prefixes
+- Top word tokens and common prefixes found in cracked passwords
 
 Export masks for cracking:
 
@@ -181,7 +233,7 @@ DotDitto/
 ├── analysis.py       — Hashcat mask analysis helpers
 ├── requirements.txt  — Python dependencies
 ├── templates/
-│   └── index.html    — Single-page frontend
+│   └── index.html    — Single-page frontend (~3500 lines)
 ├── sessions/         — Per-domain session files (gitignored)
 ├── .gitignore        — Excludes sessions/, venv/, etc.
 └── README.md
