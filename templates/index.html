@@ -2985,7 +2985,7 @@ function setDumpStatus(on, label) {
   const hint = document.getElementById('dump-hint');
   if (on) {
     zone.classList.add('loaded');
-    document.getElementById('dump-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — click to replace</span>';
+    document.getElementById('dump-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — drop another file to add a source</span>';
     if (hint) hint.style.display = 'none';
   } else {
     zone.classList.remove('loaded');
@@ -3003,7 +3003,7 @@ function setPotStatus(on, label) {
   const hint = document.getElementById('pot-hint');
   if (on) {
     zone.classList.add('loaded');
-    document.getElementById('pot-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — click to replace</span>';
+    document.getElementById('pot-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — drop more files to merge</span>';
     if (hint) hint.style.display = 'none';
   } else {
     zone.classList.remove('loaded');

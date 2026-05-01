@@ -71,7 +71,7 @@ secretsdump.py -ntds ntds.dit -system SYSTEM -hashes lmhash:nthash LOCAL -histor
 secretsdump.py DOMAIN/user:pass@dc.corp.local -history
 ```
 
-Drag and drop the output file onto the **secretsdump Output** zone, or click **Paste text**. A source label (e.g. DC hostname) can be set before uploading — it appears in the Source column and allows filtering by DC if you load multiple dumps.
+Drag and drop the output file onto the **secretsdump Output** zone, or click **Paste text**. A source label (e.g. DC hostname) can be set before uploading — it appears in the Source column and allows filtering by DC if you load multiple dumps. Loading a second file with a **different** source label adds it alongside existing data; loading one with the **same** label replaces that source's entries.
 
 Supported formats parsed automatically:
 
@@ -94,7 +94,7 @@ Run hashcat against the NT hashes, then load the pot file:
 hashcat -m 1000 hashes.txt wordlist.txt -o cracked.pot
 ```
 
-Load `cracked.pot` onto the **Hashcat Pot File(s)** zone. Multiple pot files can be loaded simultaneously.
+Load `cracked.pot` onto the **Hashcat Pot File(s)** zone. Multiple pot files can be loaded simultaneously; each additional file is **merged** into the existing cracked set — nothing is lost when you add more.
 
 Supported pot formats:
 
