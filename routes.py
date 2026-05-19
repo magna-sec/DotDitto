@@ -431,10 +431,12 @@ def export_reuse_report():
         and (not excluded or u["domain"] not in excluded)
     ]
 
+    BLANK_NT = "31d6cfe0d16ae931b73c59d7e0c089c0"
+
     hash_groups: dict = defaultdict(list)
     for u in users:
         h = u.get("nt_hash", "")
-        if h and len(h) == 32:
+        if h and len(h) == 32 and h.lower() != BLANK_NT:
             hash_groups[h].append(u)
 
     duplicates = {h: g for h, g in hash_groups.items() if len(g) > 1}
