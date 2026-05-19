@@ -424,6 +424,7 @@ def export_csv():
 def export_reuse_report():
     exclude_raw = request.args.get("exclude_domains", "")
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+    show_passwords = request.args.get("show_passwords", "0") == "1"
 
     users = [
         u for u in session["users"]
@@ -452,7 +453,8 @@ def export_reuse_report():
             short_hash = f"{nthash[:5]}<REDACTED>{nthash[-5:]}"
             if len(passwords) == 1:
                 pw = next(iter(passwords))
-                header = f"Password reused {user_count} times — {short_hash} (Cracked: {pw})"
+                pw_part = f": {pw}" if show_passwords else ""
+                header = f"Password reused {user_count} times — {short_hash} (Cracked{pw_part})"
             elif passwords:
                 header = f"Password reused {user_count} times — {short_hash} (Multiple passwords)"
             else:

@@ -1305,6 +1305,19 @@
   </div>
 </div>
 
+<!-- ─── Reuse report export modal ────────────────────────────────────────── -->
+<div id="reuse-report-modal-overlay" class="hidden" onclick="closeReuseReportModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>Export Reuse Report</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Include plaintext passwords in the report?</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeReuseReportModal()">Cancel</button>
+      <button class="btn" onclick="doExportReuseReport(false)">Redact Passwords</button>
+      <button class="btn primary" onclick="doExportReuseReport(true)">Include Passwords</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── History detail modal ─────────────────────────────────────────────── -->
 <div id="hist-modal-overlay" class="hidden" onclick="closeHistoryModal(event)">
   <div class="hist-modal" onclick="event.stopPropagation()">
@@ -2166,7 +2179,16 @@ function exportWordWordlist() {
 }
 
 function exportReuseReport() {
+  document.getElementById('reuse-report-modal-overlay').classList.remove('hidden');
+}
+function closeReuseReportModal(e) {
+  if (e && e.target !== document.getElementById('reuse-report-modal-overlay')) return;
+  document.getElementById('reuse-report-modal-overlay').classList.add('hidden');
+}
+function doExportReuseReport(showPasswords) {
+  document.getElementById('reuse-report-modal-overlay').classList.add('hidden');
   const p = new URLSearchParams(excludeParam());
+  if (showPasswords) p.set('show_passwords', '1');
   window.location.href = `/api/export/reuse-report${p.toString() ? '?' + p : ''}`;
   toast('Downloading reuse report…', 'info', 2000);
 }
