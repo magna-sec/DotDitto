@@ -5,6 +5,7 @@ All Flask API routes, registered as a Blueprint.
 import csv
 import io
 import json
+from collections import defaultdict
 from datetime import datetime
 
 from flask import Blueprint, Response, jsonify, request
@@ -416,6 +417,55 @@ def export_csv():
         buf.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=dotditto_export.csv"},
+    )
+
+
+@bp.route("/api/export/reuse-report")
+def export_reuse_report():
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+
+    users = [
+        u for u in session["users"]
+        if not u["is_history"] and not u["is_machine"]
+        and (not excluded or u["domain"] not in excluded)
+    ]
+
+    hash_groups: dict = defaultdict(list)
+    for u in users:
+        h = u.get("nt_hash", "")
+        if h and len(h) == 32:
+            hash_groups[h].append(u)
+
+    duplicates = {h: g for h, g in hash_groups.items() if len(g) > 1}
+    lines: list[str] = []
+
+    if not duplicates:
+        lines.append("No duplicate NT hashes found.")
+    else:
+        sorted_groups = sorted(duplicates.items(), key=lambda x: len(x[1]), reverse=True)
+        for nthash, group in sorted_groups:
+            passwords = {u["password"] for u in group if u["password"]}
+            user_count = len(group)
+            short_hash = f"{nthash[:5]}<REDACTED>{nthash[-5:]}"
+            if len(passwords) == 1:
+                pw = next(iter(passwords))
+                header = f"Password reused {user_count} times — {short_hash} (Cracked: {pw})"
+            elif passwords:
+                header = f"Password reused {user_count} times — {short_hash} (Multiple passwords)"
+            else:
+                header = f"Password reused {user_count} times — {short_hash} (Not Cracked)"
+            lines.append(header)
+            lines.append("")
+            for u in sorted(group, key=lambda x: x["username"].lower()):
+                lines.append(f"  - {u['username']}")
+            lines.append("")
+
+    content = "\n".join(lines)
+    return Response(
+        content,
+        mimetype="text/plain",
+        headers={"Content-Disposition": "attachment; filename=dotditto_reuse_report.txt"},
     )
 
 

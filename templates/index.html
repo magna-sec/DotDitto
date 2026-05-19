@@ -1764,6 +1764,7 @@ RETURN n</pre>
             <button class="btn sm client-hide" onclick="exportWordlist()" title="Download all cracked passwords as a wordlist">Export Wordlist</button>
             <button class="btn sm client-hide" onclick="exportWordWordlist()" title="Download most-used word tokens as a wordlist">Export Word List</button>
             <button class="btn sm" onclick="exportAnalysisReport()" title="Download a plain-text analysis report">Export Analysis Report</button>
+            <button class="btn sm client-hide" onclick="exportReuseReport()" title="Download shared-hash groups: each reused NT hash with all accounts that share it">Export Reuse Report</button>
           </div>
         </div>
 
@@ -2162,6 +2163,12 @@ function exportWordlist() {
 function exportWordWordlist() {
   window.location.href = '/api/export/wordlist/words';
   toast('Downloading word-token list…', 'info', 2000);
+}
+
+function exportReuseReport() {
+  const p = new URLSearchParams(excludeParam());
+  window.location.href = `/api/export/reuse-report${p.toString() ? '?' + p : ''}`;
+  toast('Downloading reuse report…', 'info', 2000);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
