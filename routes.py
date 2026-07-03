@@ -255,8 +255,12 @@ def get_stats():
         pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
-    # Domain/source dropdowns always show all options regardless of current filter
+    # Domain/source dropdowns always show all options regardless of current filter.
+    # Append "" (accounts with no DOMAIN\ prefix — local/SAM accounts) so they're
+    # filterable; the frontend labels it "(no domain)".
     domains = sorted({u["domain"] for u in all_u if u["domain"]})
+    if any(not u["domain"] for u in all_u if not u["is_history"]):
+        domains.append("")
     sources = sorted({u.get("dump_source", "") for u in all_u if u.get("dump_source")})
     rate    = round(len(cracked) / len(user_accts) * 100, 1) if user_accts else 0.0
 
