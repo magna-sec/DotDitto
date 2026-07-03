@@ -1798,6 +1798,13 @@ RETURN n</pre>
           <option value="blank">Blank / Disabled only</option>
         </select>
 
+        <select id="filter-added" onchange="filterChanged()" title="Filter to passwords cracked within a recent time window">
+          <option value="">Added: any time</option>
+          <option value="24">Added: last 24h</option>
+          <option value="168">Added: last 7 days</option>
+          <option value="720">Added: last 30 days</option>
+        </select>
+
         <select id="filter-tier0" onchange="filterChanged()">
           <option value="all">All users</option>
           <option value="tier0">Tier 0 only</option>
@@ -1850,6 +1857,7 @@ RETURN n</pre>
               <th>NTLM Hash</th>
               <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
               <th onclick="sortBy('pw_len')" title="Sort by password length" style="width:46px;text-align:center">Len<span class="sort-arrow" id="sa-pw_len"></span></th>
+              <th onclick="sortBy('cracked_at')" title="When the password was cracked (from a pot upload). Sort to surface recent cracks.">Cracked<span class="sort-arrow" id="sa-cracked_at"></span></th>
               <th>History</th>
               <th style="min-width:80px">Notes</th>
               <th>Source</th>
@@ -2097,6 +2105,7 @@ const state = {
   source:      'all',
   showMachines: false,
   tier0Only:   false,
+  addedWithin: '',
   lastParams: {},
 };
 
@@ -2484,6 +2493,7 @@ function filterChanged() {
   state.source       = document.getElementById('filter-source').value;
   state.showMachines = document.getElementById('chk-machines').checked;
   state.tier0Only    = document.getElementById('filter-tier0').value === 'tier0';
+  state.addedWithin  = document.getElementById('filter-added').value;
   state.page = 1;
   loadStats();   // re-renders stat cards with new domain/source scope
   loadUsers();
@@ -2549,6 +2559,7 @@ async function loadUsers() {
     sort_by:      state.sortCol,
     sort_dir:     state.sortDir,
     tier0_only:   state.tier0Only,
+    added_within: state.addedWithin,
     ...excludeParam(),
   };
   state.lastParams = params;
@@ -3121,7 +3132,7 @@ function renderTable(users) {
   _pageUsers = users;
   const tbody = document.getElementById('table-body');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateSortArrows();
     return;
   }
@@ -3174,6 +3185,10 @@ function renderTable(users) {
 
     const srcLabel = u.dump_source || '—';
     const commentCell = buildCommentCell(u);
+    const rel = relTime(u.cracked_at);
+    const crackedCell = rel
+      ? `<td style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="Cracked ${esc(new Date(u.cracked_at).toLocaleString())}">${rel}</td>`
+      : '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     rows.push(`<tr class="${rowClass}">
       <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
@@ -3181,6 +3196,7 @@ function renderTable(users) {
       <td>${hashCell(u.nt_hash)}</td>
       <td>${pwHtml}</td>
       ${pwLenCell}
+      ${crackedCell}
       <td>${histHtml}</td>
       ${commentCell}
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);white-space:normal;word-break:break-word;max-width:160px">${esc(srcLabel)}</td>
@@ -3192,7 +3208,7 @@ function renderTable(users) {
 }
 
 function updateSortArrows() {
-  ['username','domain','rid','password','pw_len'].forEach(col => {
+  ['username','domain','rid','password','pw_len','cracked_at'].forEach(col => {
     const el = document.getElementById(`sa-${col}`);
     if (el) el.textContent = state.sortCol === col ? (state.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
   });
@@ -3434,6 +3450,26 @@ function decodePw(pw) {
   } catch {
     return Array.from(bytes).map(b => String.fromCharCode(b)).join('');
   }
+}
+
+/* Relative "time ago" from an ISO timestamp (server local time, no tz).
+   Returns null for missing/invalid input. */
+function relTime(iso) {
+  if (!iso) return null;
+  const then = new Date(iso);
+  if (isNaN(then.getTime())) return null;
+  const secs = Math.floor((Date.now() - then.getTime()) / 1000);
+  if (secs < 0)    return 'just now';
+  if (secs < 45)   return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60)   return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)    return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30)   return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

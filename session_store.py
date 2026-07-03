@@ -4,7 +4,7 @@ In-memory session, disk persistence, password matching, and filtering.
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 SESSION_FILE = "session.json"
 
@@ -26,6 +26,7 @@ session: dict = {
     },
     "users": [],
     "pot_hashes": {},
+    "pot_added": {},      # nt_hash -> ISO timestamp when first added to the pot
     "tier0_users": [],    # list of lowercase "user@domain" strings
     "user_comments": {},  # keyed by "domain/username" (lowercase)
 }
@@ -67,6 +68,7 @@ def load_session_file() -> None:
             # Ensure fields added after initial save exist on every user object
             session.setdefault("tier0_users", [])
             session.setdefault("user_comments", {})
+            session.setdefault("pot_added", {})
             for u in session["users"]:
                 u.setdefault("aes256", None)
                 u.setdefault("aes128", None)
@@ -93,6 +95,7 @@ def clear_session() -> None:
             },
             "users": [],
             "pot_hashes": {},
+            "pot_added": {},
             "tier0_users": [],
             "user_comments": {},
         }
@@ -105,6 +108,7 @@ def replace_session(data: dict) -> None:
     session.clear()
     session.update(data)
     session.setdefault("pot_hashes", {})
+    session.setdefault("pot_added", {})
     session.setdefault("tier0_users", [])
     session.setdefault("user_comments", {})
     session.setdefault(
@@ -134,11 +138,19 @@ def apply_passwords() -> None:
     "everyone with a blank password" isn't meaningful reuse.
     """
     ph = session["pot_hashes"]
+    pot_added = session.get("pot_added", {})
 
     for user in session["users"]:
         is_blank = user["nt_hash"] == BLANK_NT_HASH
         user["is_blank"] = is_blank
         user["password"] = "" if is_blank else ph.get(user["nt_hash"])
+        # When this account's hash first entered the pot (real cracks only —
+        # blank/uncracked have no crack event). None for pre-feature cracks.
+        user["cracked_at"] = (
+            pot_added.get(user["nt_hash"])
+            if (user["password"] and not is_blank)
+            else None
+        )
 
     # Count how many (non-history) user accounts share each plaintext.
     # Blank passwords (falsy "") are naturally excluded here.
@@ -207,10 +219,17 @@ def get_filtered_users(
     sort_dir: str = "asc",
     exclude_domains: set | None = None,
     tier0_only: bool = False,
+    added_within_hours: float | None = None,
 ) -> list:
     all_users = session["users"]
     tier0_lookup  = _build_tier0_lookup(session.get("tier0_users", []))
     comment_map   = session.get("user_comments", {})
+
+    added_cutoff = (
+        datetime.now() - timedelta(hours=added_within_hours)
+        if added_within_hours
+        else None
+    )
 
     # Separate current accounts from history entries
     history_map: dict[tuple, list] = {}
@@ -248,6 +267,15 @@ def get_filtered_users(
                 return False
             if cracked == "blank" and not u.get("is_blank"):
                 return False
+        if added_cutoff is not None:
+            ca = u.get("cracked_at")
+            if not ca:
+                return False
+            try:
+                if datetime.fromisoformat(ca) < added_cutoff:
+                    return False
+            except ValueError:
+                return False
         if tier0_only and not check_is_tier0(u["username"], u["domain"], tier0_lookup):
             return False
         if s_lower:
@@ -281,6 +309,8 @@ def get_filtered_users(
         "nt_hash":  lambda u: u["nt_hash"],
         "password": lambda u: (u["password"] or "").lower(),
         "pw_len":   lambda u: len(u["password"]) if u["password"] is not None else -1,
+        # ISO timestamps sort chronologically as strings; "" (never/blank) first
+        "cracked_at": lambda u: u.get("cracked_at") or "",
     }
     if sort_by in _sort_keys:
         filtered.sort(key=_sort_keys[sort_by], reverse=reverse)

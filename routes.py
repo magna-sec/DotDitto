@@ -25,6 +25,20 @@ from session_store import (
 bp = Blueprint("api", __name__)
 
 
+def _parse_added_within(raw: str) -> float | None:
+    """Parse the 'added_within' query param (hours) into a float, or None.
+
+    Empty/"all"/invalid/non-positive values mean 'no time filter'.
+    """
+    if not raw or raw == "all":
+        return None
+    try:
+        hours = float(raw)
+    except ValueError:
+        return None
+    return hours if hours > 0 else None
+
+
 # ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
@@ -115,10 +129,16 @@ def upload_pot():
     if not files or not files[0].filename:
         return jsonify({"error": "No files provided"}), 400
 
+    now = datetime.now().isoformat()
+    pot_added = session.setdefault("pot_added", {})
     total_new = 0
     names = []
     for f in files:
         pot = parse_pot_file(f.read().decode("utf-8", errors="replace"))
+        # Stamp each genuinely new hash with the time it first entered the pot
+        for h in pot:
+            if h not in session["pot_hashes"]:
+                pot_added[h] = now
         session["pot_hashes"].update(pot)
         total_new += len(pot)
         names.append(f.filename)
@@ -139,6 +159,11 @@ def paste_pot():
         return jsonify({"error": "No text provided"}), 400
 
     pot = parse_pot_file(text)
+    now = datetime.now().isoformat()
+    pot_added = session.setdefault("pot_added", {})
+    for h in pot:
+        if h not in session["pot_hashes"]:
+            pot_added[h] = now
     session["pot_hashes"].update(pot)
     session["metadata"]["pot_sources"] = session["metadata"].get("pot_sources", []) + ["pasted text"]
     apply_passwords()
@@ -185,6 +210,7 @@ def get_users():
         sort_dir        = request.args.get("sort_dir", "asc"),
         exclude_domains = excluded or None,
         tier0_only      = request.args.get("tier0_only", "false") == "true",
+        added_within_hours = _parse_added_within(request.args.get("added_within", "")),
     )
 
     total  = len(users)
@@ -420,11 +446,12 @@ def export_csv():
         show_machines   = request.args.get("show_machines", "true") == "true",
         exclude_domains = excluded or None,
         tier0_only      = request.args.get("tier0_only", "false") == "true",
+        added_within_hours = _parse_added_within(request.args.get("added_within", "")),
     )
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
-                "Blank/Disabled", "Shared Count", "Machine", "History", "Hist Index", "Source"])
+                "Blank/Disabled", "Cracked At", "Shared Count", "Machine", "History", "Hist Index", "Source"])
     for u in users:
         w.writerow(
             [
@@ -432,6 +459,7 @@ def export_csv():
                 u["lm_hash"], u["nt_hash"],
                 "(blank)" if u.get("is_blank") else (u["password"] or ""),
                 "Yes" if u.get("is_blank") else "No",
+                u.get("cracked_at") or "",
                 u["password_count"] if u["password"] is not None else "",
                 "Yes" if u["is_machine"] else "No",
                 "Yes" if u["is_history"] else "No",
@@ -620,6 +648,7 @@ def clear_all():
 @bp.route("/api/clear/pot", methods=["POST"])
 def clear_pot():
     session["pot_hashes"] = {}
+    session["pot_added"] = {}
     session["metadata"]["pot_sources"] = []
     apply_passwords()  # re-derive password/is_blank so blank accounts stay marked cracked
     save_session()
