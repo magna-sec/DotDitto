@@ -2,8 +2,10 @@
 DotDitto — session_store.py
 In-memory session, disk persistence, password matching, and filtering.
 """
+import hashlib
 import json
 import os
+import struct
 from datetime import datetime, timedelta
 
 SESSION_FILE = "session.json"
@@ -17,6 +19,11 @@ BLANK_NT_HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 # (NoLMHash, default since Vista/2008). Any other value means a *real* LM hash
 # is present: legacy, ≤14 chars, uppercased, DES — trivially crackable.
 EMPTY_LM_HASH = "aad3b435b51404eeaad3b435b51404ee"
+
+# The LM hash of an empty 7-char half. A password of ≤7 chars leaves the second
+# half empty, so its second-half hash is this value — treated as a known-empty
+# half so a single cracked half fully reconstructs the plaintext.
+EMPTY_LM_HALF = "aad3b435b51404ee"
 
 # ---------------------------------------------------------------------------
 # In-memory session
@@ -32,9 +39,56 @@ session: dict = {
     "users": [],
     "pot_hashes": {},
     "pot_added": {},      # nt_hash -> ISO timestamp when first added to the pot
+    "lm_halves": {},      # 16-hex LM half -> uppercase plaintext half (hashcat -m 3000)
     "tier0_users": [],    # list of lowercase "user@domain" strings
     "user_comments": {},  # keyed by "domain/username" (lowercase)
 }
+
+
+# ---------------------------------------------------------------------------
+# NT hash (MD4 of UTF-16LE) — used to auto-confirm LM-recovered passwords
+# ---------------------------------------------------------------------------
+
+def _md4(data: bytes) -> str:
+    """Pure-Python MD4 (RFC 1320) fallback for builds where hashlib lacks it
+    (e.g. OpenSSL 3 with the legacy provider disabled)."""
+    mask = 0xFFFFFFFF
+    def lrot(x, n): return ((x << n) | (x >> (32 - n))) & mask
+    msg = bytearray(data)
+    bit_len = (len(data) * 8) & 0xFFFFFFFFFFFFFFFF
+    msg.append(0x80)
+    while len(msg) % 64 != 56:
+        msg.append(0)
+    msg += struct.pack("<Q", bit_len)
+
+    a0, b0, c0, d0 = 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476
+    for off in range(0, len(msg), 64):
+        X = struct.unpack("<16I", bytes(msg[off:off + 64]))
+        A, B, C, D = a0, b0, c0, d0
+        F = lambda x, y, z: (x & y) | (~x & z)
+        G = lambda x, y, z: (x & y) | (x & z) | (y & z)
+        H = lambda x, y, z: x ^ y ^ z
+        for k in range(16):
+            s = (3, 7, 11, 19)[k % 4]
+            A = lrot((A + F(B, C, D) + X[k]) & mask, s); A, B, C, D = D, A, B, C
+        for idx, k in enumerate((0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15)):
+            s = (3, 5, 9, 13)[idx % 4]
+            A = lrot((A + G(B, C, D) + X[k] + 0x5A827999) & mask, s); A, B, C, D = D, A, B, C
+        for idx, k in enumerate((0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15)):
+            s = (3, 9, 11, 15)[idx % 4]
+            A = lrot((A + H(B, C, D) + X[k] + 0x6ED9EBA1) & mask, s); A, B, C, D = D, A, B, C
+        a0 = (a0 + A) & mask; b0 = (b0 + B) & mask
+        c0 = (c0 + C) & mask; d0 = (d0 + D) & mask
+    return struct.pack("<4I", a0, b0, c0, d0).hex()
+
+
+def nt_hash(password: str) -> str:
+    """NT hash (MD4 of the UTF-16LE password), lowercase hex."""
+    data = password.encode("utf-16-le")
+    try:
+        return hashlib.new("md4", data).hexdigest()
+    except Exception:
+        return _md4(data)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +128,7 @@ def load_session_file() -> None:
             session.setdefault("tier0_users", [])
             session.setdefault("user_comments", {})
             session.setdefault("pot_added", {})
+            session.setdefault("lm_halves", {})
             for u in session["users"]:
                 u.setdefault("aes256", None)
                 u.setdefault("aes128", None)
@@ -101,6 +156,7 @@ def clear_session() -> None:
             "users": [],
             "pot_hashes": {},
             "pot_added": {},
+            "lm_halves": {},
             "tier0_users": [],
             "user_comments": {},
         }
@@ -114,6 +170,7 @@ def replace_session(data: dict) -> None:
     session.update(data)
     session.setdefault("pot_hashes", {})
     session.setdefault("pot_added", {})
+    session.setdefault("lm_halves", {})
     session.setdefault("tier0_users", [])
     session.setdefault("user_comments", {})
     session.setdefault(
@@ -170,6 +227,7 @@ def apply_passwords() -> None:
     """
     ph = session["pot_hashes"]
     pot_added = session.get("pot_added", {})
+    lm_halves = session.get("lm_halves", {})
 
     for user in session["users"]:
         is_blank = user["nt_hash"] == BLANK_NT_HASH
@@ -184,6 +242,33 @@ def apply_passwords() -> None:
             if (user["password"] and not is_blank)
             else None
         )
+
+        # ── LM reconstruction (from hashcat -m 3000 half-hash cracks) ──────
+        # Separate track from NT cracking: recovers the password in UPPERCASE
+        # (LM is case-insensitive), so it never counts as a crack on its own.
+        user["lm_password"]  = None
+        user["lm_partial"]   = False
+        user["lm_confirmed"] = False
+        if user["has_lm"]:
+            lm = user["lm_hash"]
+            h1, h2 = lm[:16], lm[16:]
+            p1 = "" if h1 == EMPTY_LM_HALF else lm_halves.get(h1)
+            p2 = "" if h2 == EMPTY_LM_HALF else lm_halves.get(h2)
+            if p1 is not None and p2 is not None:
+                user["lm_password"] = p1 + p2               # full uppercase plaintext
+            elif p1 is not None:
+                user["lm_password"] = p1 + "…"; user["lm_partial"] = True
+            elif p2 is not None:
+                user["lm_password"] = "…" + p2; user["lm_partial"] = True
+
+            # Auto-confirm: if the recovered plaintext's NT hash matches this
+            # account's NT hash, the password really is that (all-caps) string —
+            # promote it to a confirmed NT crack so it counts normally.
+            if (user["lm_password"] and not user["lm_partial"]
+                    and user["password"] is None and not is_blank):
+                if nt_hash(user["lm_password"]) == user["nt_hash"]:
+                    user["password"] = user["lm_password"]
+                    user["lm_confirmed"] = True
 
     # Count how many (non-history) user accounts share each plaintext.
     # Blank passwords (falsy "") are naturally excluded here.
@@ -253,6 +338,7 @@ def get_filtered_users(
     exclude_domains: set | None = None,
     tier0_only: bool = False,
     added_within_hours: float | None = None,
+    hash_type: str = "all",
 ) -> list:
     all_users = session["users"]
     tier0_lookup  = _build_tier0_lookup(session.get("tier0_users", []))
@@ -314,6 +400,19 @@ def get_filtered_users(
         is_t0 = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
         if tier0_only and not is_t0:
             return False
+        if hash_type != "all":
+            if hash_type == "lm" and not u.get("has_lm"):
+                return False
+            if hash_type == "lm_recovered" and not u.get("lm_password"):
+                return False
+            if hash_type == "aes256" and not u.get("aes256"):
+                return False
+            if hash_type == "aes128" and not u.get("aes128"):
+                return False
+            if hash_type == "des" and not u.get("des"):
+                return False
+            if hash_type == "kerberos" and not (u.get("aes256") or u.get("aes128") or u.get("des")):
+                return False
         if s_lower:
             if search_field == "username":
                 match = s_lower in u["username"].lower()

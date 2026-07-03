@@ -474,6 +474,16 @@
     .pw-shared  { font-size: 10px; color: var(--yellow); background: var(--yellow-dim); padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
     .pw-none    { color: var(--red); font-size: 12px; }
     .pw-blank   { color: var(--yellow); font-weight: 600; font-size: 12px; letter-spacing: .02em; }
+    .pw-lm {
+      font-family: var(--font-mono); font-size: 11px; color: var(--yellow);
+      background: var(--yellow-dim); border: 1px solid rgba(227,179,65,.35);
+      padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+    }
+    .pw-lm-tag {
+      font-size: 9px; color: var(--yellow); background: var(--yellow-dim);
+      border: 1px solid rgba(227,179,65,.35); padding: 0 5px; border-radius: 3px;
+      margin-left: 6px; vertical-align: middle; letter-spacing: .04em; text-transform: uppercase;
+    }
 
     .badge {
       display: inline-block; padding: 1px 7px; border-radius: 4px;
@@ -1817,6 +1827,16 @@ RETURN n</pre>
           <option value="720">Added: last 30 days</option>
         </select>
 
+        <select id="filter-hashtype" onchange="filterChanged()" title="Filter by which hash types an account has">
+          <option value="all">All hash types</option>
+          <option value="lm">LM hash present</option>
+          <option value="lm_recovered">LM recovered</option>
+          <option value="kerberos">Kerberos key (any)</option>
+          <option value="aes256">AES-256 key</option>
+          <option value="aes128">AES-128 key</option>
+          <option value="des">DES key</option>
+        </select>
+
         <select id="filter-tier0" onchange="filterChanged()">
           <option value="all">All users</option>
           <option value="tier0">Tier 0 only</option>
@@ -2119,6 +2139,7 @@ const state = {
   showMachines: false,
   tier0Only:   false,
   addedWithin: '',
+  hashType:    'all',
   lastParams: {},
 };
 
@@ -2318,7 +2339,7 @@ async function loadFilePot(files) {
     const res = await api('POST', '/api/upload/pot', fd);
     const names = res.filenames.join(', ');
     setPotStatus(true, `${names}  (${res.count} new, ${res.total_pot} total)`);
-    toast(`Loaded ${res.count} pot entries`, 'success');
+    toast(`Loaded ${res.count} pot entries` + (res.lm_halves ? ` + ${res.lm_halves} LM halves` : ''), 'success');
     if (state.hasDump) await refresh(true);
   } catch (err) {
     toast(`Pot error: ${err.message}`, 'error', 5000);
@@ -2329,7 +2350,7 @@ async function loadPastePot(text) {
   try {
     const res = await api('POST', '/api/paste/pot', { text });
     setPotStatus(true, `Pasted  (${res.count} new, ${res.total_pot} total)`);
-    toast(`Loaded ${res.count} pot entries`, 'success');
+    toast(`Loaded ${res.count} pot entries` + (res.lm_halves ? ` + ${res.lm_halves} LM halves` : ''), 'success');
     if (state.hasDump) await refresh(true);
   } catch (err) {
     toast(`Pot error: ${err.message}`, 'error', 5000);
@@ -2464,6 +2485,11 @@ function copyPw(idx) {
   if (u && u.password) copyText(decodePw(u.password));
 }
 
+function copyLm(idx) {
+  const u = _pageUsers[idx];
+  if (u && u.lm_password) copyText(u.lm_password);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Filtering & pagination
 ══════════════════════════════════════════════════════════════════════════ */
@@ -2507,6 +2533,7 @@ function filterChanged() {
   state.showMachines = document.getElementById('chk-machines').checked;
   state.tier0Only    = document.getElementById('filter-tier0').value === 'tier0';
   state.addedWithin  = document.getElementById('filter-added').value;
+  state.hashType     = document.getElementById('filter-hashtype').value;
   state.page = 1;
   loadStats();   // re-renders stat cards with new domain/source scope
   loadUsers();
@@ -2573,6 +2600,7 @@ async function loadUsers() {
     sort_dir:     state.sortDir,
     tier0_only:   state.tier0Only,
     added_within: state.addedWithin,
+    hash_type:    state.hashType,
     ...excludeParam(),
   };
   state.lastParams = params;
@@ -3177,14 +3205,23 @@ function renderTable(users) {
       const _pw = decodePw(u.password);
       const shared = (u.password_count || 1) > 1
         ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
-      pwHtml = `<span class="pw-cracked">${esc(_pw)}</span>${shared} `
+      const viaLm = u.lm_confirmed
+        ? '<span class="pw-lm-tag" title="Confirmed via LM — the recovered uppercase plaintext matched this account\'s NT hash">via LM</span>' : '';
+      pwHtml = `<span class="pw-cracked">${esc(_pw)}</span>${shared}${viaLm} `
              + `<button class="copy-btn" onclick="event.stopPropagation();copyPw(${i})">copy</button>`;
       pwLenCell = `<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${_pw.length}</td>`;
     } else {
       const warn = histCracked.length > 0
         ? `<span class="badge-hist-warn" title="A previous password was cracked — click to view">hist cracked</span>`
         : '';
-      pwHtml = `<span class="pw-none">—</span>${warn}`;
+      // NT uncracked, but LM may be recovered (uppercase, case-unconfirmed —
+      // deliberately NOT counted as cracked).
+      let lmChip = '';
+      if (u.lm_password) {
+        lmChip = ` <span class="pw-lm" title="LM-recovered${u.lm_partial ? ' (partial — one half still uncracked)' : ''}: password in UPPERCASE, exact case unconfirmed. Not counted as cracked.">LM: ${esc(u.lm_password)}</span>`;
+        if (!u.lm_partial) lmChip += ` <button class="copy-btn" onclick="event.stopPropagation();copyLm(${i})">copy</button>`;
+      }
+      pwHtml = `<span class="pw-none">—</span>${warn}${lmChip}`;
     }
 
     /* History badge */

@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Blueprint, Response, jsonify, request
 
 from analysis import build_word_wordlist, run_analysis
-from parsers import parse_pot_file, parse_secretsdump
+from parsers import parse_lm_halves, parse_pot_file, parse_secretsdump
 from session_store import (
     BLANK_NT_HASH,
     apply_passwords,
@@ -131,15 +131,21 @@ def upload_pot():
 
     now = datetime.now().isoformat()
     pot_added = session.setdefault("pot_added", {})
+    lm_halves = session.setdefault("lm_halves", {})
     total_new = 0
+    lm_new = 0
     names = []
     for f in files:
-        pot = parse_pot_file(f.read().decode("utf-8", errors="replace"))
+        text = f.read().decode("utf-8", errors="replace")
+        pot = parse_pot_file(text)
+        halves = parse_lm_halves(text)
         # Stamp each genuinely new hash with the time it first entered the pot
         for h in pot:
             if h not in session["pot_hashes"]:
                 pot_added[h] = now
         session["pot_hashes"].update(pot)
+        lm_new += sum(1 for h in halves if h not in lm_halves)
+        lm_halves.update(halves)
         total_new += len(pot)
         names.append(f.filename)
 
@@ -147,7 +153,8 @@ def upload_pot():
     apply_passwords()
     save_session()
     return jsonify(
-        {"success": True, "count": total_new, "total_pot": len(session["pot_hashes"]), "filenames": names}
+        {"success": True, "count": total_new, "lm_halves": lm_new,
+         "total_pot": len(session["pot_hashes"]), "filenames": names}
     )
 
 
@@ -159,16 +166,21 @@ def paste_pot():
         return jsonify({"error": "No text provided"}), 400
 
     pot = parse_pot_file(text)
+    halves = parse_lm_halves(text)
     now = datetime.now().isoformat()
     pot_added = session.setdefault("pot_added", {})
+    lm_halves = session.setdefault("lm_halves", {})
     for h in pot:
         if h not in session["pot_hashes"]:
             pot_added[h] = now
     session["pot_hashes"].update(pot)
+    lm_new = sum(1 for h in halves if h not in lm_halves)
+    lm_halves.update(halves)
     session["metadata"]["pot_sources"] = session["metadata"].get("pot_sources", []) + ["pasted text"]
     apply_passwords()
     save_session()
-    return jsonify({"success": True, "count": len(pot), "total_pot": len(session["pot_hashes"])})
+    return jsonify({"success": True, "count": len(pot), "lm_halves": lm_new,
+                    "total_pot": len(session["pot_hashes"])})
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +223,7 @@ def get_users():
         exclude_domains = excluded or None,
         tier0_only      = request.args.get("tier0_only", "false") == "true",
         added_within_hours = _parse_added_within(request.args.get("added_within", "")),
+        hash_type       = request.args.get("hash_type", "all"),
     )
 
     total  = len(users)
@@ -453,11 +466,12 @@ def export_csv():
         exclude_domains = excluded or None,
         tier0_only      = request.args.get("tier0_only", "false") == "true",
         added_within_hours = _parse_added_within(request.args.get("added_within", "")),
+        hash_type       = request.args.get("hash_type", "all"),
     )
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
-                "Blank/Disabled", "Cracked At", "Shared Count", "Machine", "History", "Hist Index", "Source"])
+                "Blank/Disabled", "LM Password", "Cracked At", "Shared Count", "Machine", "History", "Hist Index", "Source"])
     for u in users:
         w.writerow(
             [
@@ -465,6 +479,7 @@ def export_csv():
                 u["lm_hash"], u["nt_hash"],
                 "(blank)" if u.get("is_blank") else (u["password"] or ""),
                 "Yes" if u.get("is_blank") else "No",
+                u.get("lm_password") or "",
                 u.get("cracked_at") or "",
                 u["password_count"] if u["password"] is not None else "",
                 "Yes" if u["is_machine"] else "No",
@@ -655,6 +670,7 @@ def clear_all():
 def clear_pot():
     session["pot_hashes"] = {}
     session["pot_added"] = {}
+    session["lm_halves"] = {}
     session["metadata"]["pot_sources"] = []
     apply_passwords()  # re-derive password/is_blank so blank accounts stay marked cracked
     save_session()

@@ -11,6 +11,7 @@ import re
 _HASH_RE = re.compile(r"^[a-fA-F0-9]{32}$|^NO PASSWORD\*+$", re.IGNORECASE)
 _HIST_RE = re.compile(r"^(.+?)_history(\d+)$", re.IGNORECASE)
 _NT32_RE = re.compile(r"^[a-fA-F0-9]{32}$")
+_LM16_RE = re.compile(r"^[a-fA-F0-9]{16}$")
 _KERB_RE = re.compile(
     r"^(aes256-cts-hmac-sha1-96|aes128-cts-hmac-sha1-96|des-cbc-md5)$",
     re.IGNORECASE,
@@ -165,3 +166,27 @@ def parse_pot_file(text: str) -> dict:
             pot[h] = pw
 
     return pot
+
+
+def parse_lm_halves(text: str) -> dict:
+    """Parse LM half-hash entries from a hashcat -m 3000 pot file.
+
+    Each LM hash is cracked as two independent 8-byte halves, giving lines:
+        <16-hex>:PLAINTEXT_HALF        (optionally $LM$-prefixed)
+    Returns a dict of {16-hex-half: uppercase-plaintext-half}. 32-hex NT/full
+    lines are ignored here (they're handled by parse_pot_file).
+    """
+    halves: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("$LM$"):
+            line = line[4:]
+        colon = line.find(":")
+        if colon == -1:
+            continue
+        h = line[:colon].lower()
+        if _LM16_RE.match(h):
+            halves[h] = line[colon + 1:]
+    return halves
