@@ -1857,7 +1857,7 @@ RETURN n</pre>
               <th>NTLM Hash</th>
               <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
               <th onclick="sortBy('pw_len')" title="Sort by password length" style="width:46px;text-align:center">Len<span class="sort-arrow" id="sa-pw_len"></span></th>
-              <th onclick="sortBy('cracked_at')" title="When the password was cracked (from a pot upload). Sort to surface recent cracks.">Cracked<span class="sort-arrow" id="sa-cracked_at"></span></th>
+              <th onclick="sortBy('cracked_at')" title="When this cracked password was added (from a pot upload). Sort to surface recent additions.">Added<span class="sort-arrow" id="sa-cracked_at"></span></th>
               <th>History</th>
               <th style="min-width:80px">Notes</th>
               <th>Source</th>
@@ -3187,7 +3187,7 @@ function renderTable(users) {
     const commentCell = buildCommentCell(u);
     const rel = relTime(u.cracked_at);
     const crackedCell = rel
-      ? `<td style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="Cracked ${esc(new Date(u.cracked_at).toLocaleString())}">${rel}</td>`
+      ? `<td style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="Added ${esc(new Date(u.cracked_at).toLocaleString())}">${rel}</td>`
       : '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     rows.push(`<tr class="${rowClass}">
       <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
