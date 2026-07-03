@@ -2,6 +2,8 @@
 
 # Session data (contains sensitive credential hashes — never commit)
 session.json
+session.json.tmp
+sessions/
 
 # Python virtual environment
 venv/

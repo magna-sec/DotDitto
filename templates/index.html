@@ -167,7 +167,7 @@
 
     /* ── Stats strip ─────────────────────────────────────────────────── */
     .stats-grid {
-      display: grid; grid-template-columns: repeat(5, 1fr);
+      display: grid; grid-template-columns: repeat(6, 1fr);
       gap: 12px; margin-bottom: 20px;
     }
     .stat-card {
@@ -180,6 +180,7 @@
     .stat-card.green  .value { color: var(--green); }
     .stat-card.red    .value { color: var(--red); }
     .stat-card.yellow .value { color: var(--yellow); }
+    .stat-card.purple .value { color: var(--purple); }
 
     /* ── Top passwords chart ─────────────────────────────────────────── */
     .top-pw-card {
@@ -1749,6 +1750,10 @@ RETURN n</pre>
         <div class="label">Uncracked</div>
         <div class="value" id="stat-uncracked">0</div>
       </div>
+      <div class="stat-card purple">
+        <div class="label">Blank / Disabled</div>
+        <div class="value" id="stat-blank">0</div>
+      </div>
       <div class="stat-card yellow">
         <div class="label">Crack Rate</div>
         <div class="value" id="stat-rate">0%</div>
@@ -1790,6 +1795,7 @@ RETURN n</pre>
           <option value="all">All entries</option>
           <option value="cracked">Cracked only</option>
           <option value="uncracked">Uncracked only</option>
+          <option value="blank">Blank / Disabled only</option>
         </select>
 
         <select id="filter-tier0" onchange="filterChanged()">
@@ -2526,7 +2532,6 @@ async function loadStats() {
     buildDomainFilter(stats.domains);
     buildSourceFilter(stats.sources || []);
     updateDumpStatusFromStats(stats);
-    updateIndicators(stats);
   } catch (err) { console.error('stats error', err); }
 }
 
@@ -2594,6 +2599,7 @@ function renderStats(s) {
   document.getElementById('stat-machines').textContent = s.machine_accounts.toLocaleString();
   document.getElementById('stat-cracked').textContent  = s.cracked.toLocaleString();
   document.getElementById('stat-uncracked').textContent = s.uncracked.toLocaleString();
+  document.getElementById('stat-blank').textContent    = (s.blank ?? 0).toLocaleString();
   document.getElementById('stat-rate').textContent     = s.crack_rate + '%';
 }
 
@@ -2655,7 +2661,6 @@ function buildSourceFilter(sources) {
 
 function updateDumpStatusFromStats(stats) {
   const sources = stats.sources || [];
-  const meta    = stats.metadata || {};
   if (!state.hasDump) return;
   const totalU = stats.total_users + stats.machine_accounts;
   const hist   = stats.history_entries;
@@ -3390,8 +3395,6 @@ function setPotStatus(on, label) {
   }
 }
 
-function updateIndicators(stats) { /* called after stats reload */ }
-
 function updateHeaderBtns() {
   const hasDump = state.hasDump;
   const hasPot  = state.hasPot;
@@ -3645,7 +3648,8 @@ async function renderDomainComparison() {
       machine_accounts: acc.machine_accounts + s.machine_accounts,
       cracked:          acc.cracked          + s.cracked,
       uncracked:        acc.uncracked        + s.uncracked,
-    }), { total_users: 0, machine_accounts: 0, cracked: 0, uncracked: 0 });
+      blank:            acc.blank            + (s.blank ?? 0),
+    }), { total_users: 0, machine_accounts: 0, cracked: 0, uncracked: 0, blank: 0 });
     agg.crack_rate = agg.total_users > 0
       ? Math.round(agg.cracked / agg.total_users * 1000) / 10
       : 0;

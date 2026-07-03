@@ -37,11 +37,23 @@ session: dict = {
 
 def save_session() -> None:
     session["metadata"]["updated"] = datetime.now().isoformat()
+    # Write to a temp file in the same directory, then atomically replace the
+    # target. A crash mid-write leaves the previous good session.json intact
+    # instead of a truncated/corrupt file holding the whole engagement.
+    tmp = f"{SESSION_FILE}.tmp"
     try:
-        with open(SESSION_FILE, "w", encoding="utf-8") as fh:
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(session, fh, indent=2, ensure_ascii=False)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, SESSION_FILE)
     except Exception as exc:
         print(f"[warn] could not save session: {exc}")
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
 
 
 def load_session_file() -> None:
@@ -227,9 +239,14 @@ def get_filtered_users(
         if exclude_domains and u["domain"] in exclude_domains:
             return False
         if check_cracked:
-            if cracked == "cracked" and u["password"] is None:
+            # "cracked" = real recovered password (excludes blank/disabled);
+            # "uncracked" = no password at all (blanks have password == "" so
+            # they're excluded here too); "blank" = blank/disabled only.
+            if cracked == "cracked" and (u["password"] is None or u.get("is_blank")):
                 return False
             if cracked == "uncracked" and u["password"] is not None:
+                return False
+            if cracked == "blank" and not u.get("is_blank"):
                 return False
         if tier0_only and not check_is_tier0(u["username"], u["domain"], tier0_lookup):
             return False

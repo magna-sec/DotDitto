@@ -191,18 +191,20 @@ def get_users():
     pages  = max(1, (total + per_page - 1) // per_page)
     start  = (page - 1) * per_page
 
-    # Compute top passwords and cracked count from the full filtered result.
-    # Blank/disabled accounts count as cracked but are excluded from the
-    # top-passwords list — an empty plaintext isn't a meaningful pattern.
+    # Compute top passwords, cracked count, and blank count from the full
+    # filtered result. Blank/disabled accounts are tallied separately — they
+    # aren't a cracking win and an empty plaintext isn't a meaningful pattern.
     pw_freq: dict[str, int] = {}
     cracked_count = 0
+    blank_count   = 0
     for u in users:
         if u.get("is_history") or u.get("is_machine"):
             continue
-        if u.get("password") is not None:
+        if u.get("is_blank"):
+            blank_count += 1
+        elif u.get("password") is not None:
             cracked_count += 1
-            if not u.get("is_blank") and u["password"]:
-                pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
+            pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
     return jsonify(
@@ -213,6 +215,7 @@ def get_users():
             "per_page":      per_page,
             "pages":         pages,
             "cracked_count": cracked_count,
+            "blank_count":   blank_count,
             "top_passwords": [{"password": p, "count": c} for p, c in top_pw],
         }
     )
@@ -242,13 +245,14 @@ def get_stats():
     machines   = [u for u in scoped if u["is_machine"]]
     # History count is always global (not filtered)
     hist_entries = [u for u in all_u if u["is_history"]]
-    cracked    = [u for u in user_accts if u["password"] is not None]
-    blank      = [u for u in cracked if u.get("is_blank")]
+    # "cracked" means a real recovered password. Blank/disabled accounts are
+    # counted separately so they don't inflate the crack rate.
+    blank      = [u for u in user_accts if u.get("is_blank")]
+    cracked    = [u for u in user_accts if u["password"] is not None and not u.get("is_blank")]
 
     pw_freq: dict[str, int] = {}
     for u in cracked:
-        if not u.get("is_blank"):
-            pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
+        pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
     # Domain/source dropdowns always show all options regardless of current filter
@@ -262,7 +266,7 @@ def get_stats():
             "machine_accounts": len(machines),
             "history_entries":  len(hist_entries),
             "cracked":          len(cracked),
-            "uncracked":        len(user_accts) - len(cracked),
+            "uncracked":        len(user_accts) - len(cracked) - len(blank),
             "blank":            len(blank),
             "crack_rate":       rate,
             "top_passwords":    [{"password": p, "count": c} for p, c in top_pw],
@@ -288,18 +292,19 @@ def get_analysis():
         and (source == "all" or u.get("dump_source", "") == source)
         and (not excluded or u["domain"] not in excluded)
     ]
-    # Blank/disabled accounts (password == "") count toward the crack rate but
-    # are excluded from composition analysis — an empty plaintext has no mask,
-    # length, or character-class pattern worth aggregating.
+    # Blank/disabled accounts (password == "") are excluded from both the crack
+    # rate and composition analysis — they aren't a cracking win, and an empty
+    # plaintext has no mask, length, or character-class pattern to aggregate.
     cracked_pws   = [u["password"] for u in scope_users if u["password"]]
-    cracked_count = sum(1 for u in scope_users if u["password"] is not None)
+    blank_count   = sum(1 for u in scope_users if u.get("is_blank"))
     total_scope   = len(scope_users)
-    crack_rate    = round(cracked_count / total_scope * 100, 1) if total_scope else 0.0
+    crack_rate    = round(len(cracked_pws) / total_scope * 100, 1) if total_scope else 0.0
 
     result = run_analysis(cracked_pws)
     result["crack_rate"]    = crack_rate
     result["total_scope"]   = total_scope
-    result["cracked_count"] = cracked_count
+    result["blank_count"]   = blank_count
+    result["cracked_count"] = len(cracked_pws)
     return jsonify(result)
 
 

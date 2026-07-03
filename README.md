@@ -30,7 +30,7 @@
   - Most-common word tokens extracted from cracked passwords
 - **CSV / JSON export** — export filtered table as CSV or full session as JSON (re-importable)
 - **Copy uncracked hashes** — one-click copy of all uncracked NT hashes for hashcat
-- **Session persistence** — auto-saves each domain to `sessions/<domain>.json` (excluded from git)
+- **Session persistence** — auto-saves the full session to `session.json` (excluded from git)
 - **Fully offline** — binds to `127.0.0.1:5000` only; no external requests, no telemetry
 
 ---
@@ -113,7 +113,7 @@ DotDitto supports loading dumps from multiple domains in a single session. Domai
 - **Domains ▾** in the header lets you hide specific domains from all stats and charts (useful for excluding machine-account-heavy domains)
 - The **Domain Comparison** panel (Overview tab, appears when ≥ 2 domains are loaded) shows crack rates and account counts side-by-side for any selected domains
 
-Sessions are persisted to `sessions/<domain>.json` and reloaded automatically on start.
+All loaded domains share a single session that is persisted to `session.json` and reloaded automatically on start.
 
 ---
 
@@ -234,9 +234,9 @@ DotDitto/
 ├── analysis.py       — Hashcat mask analysis helpers
 ├── requirements.txt  — Python dependencies
 ├── templates/
-│   └── index.html    — Single-page frontend (~3500 lines)
-├── sessions/         — Per-domain session files (gitignored)
-├── .gitignore        — Excludes sessions/, venv/, etc.
+│   └── index.html    — Single-page frontend (~3900 lines)
+├── session.json      — Persisted session (created at runtime, gitignored)
+├── .gitignore        — Excludes session.json, venv/, etc.
 └── README.md
 ```
 
@@ -255,7 +255,7 @@ DotDitto is intended for **authorised penetration testing, red team engagements,
 
 - Binds to `127.0.0.1` — not accessible from other hosts
 - No authentication — run in a trusted, isolated environment
-- `sessions/<domain>.json` stores hashes in plaintext; excluded from git via `.gitignore`
+- `session.json` stores hashes in plaintext; excluded from git via `.gitignore`
 - No data is ever sent to external services
 
 Only use DotDitto against systems you have explicit written permission to assess.
