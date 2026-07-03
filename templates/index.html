@@ -2631,7 +2631,7 @@ function buildDomainFilter(domains) {
     sel.innerHTML = '<option value="all">All domains</option>';
     for (const d of visible) {
       const opt = document.createElement('option');
-      opt.value = d; opt.textContent = d || '(no domain)';
+      opt.value = d; opt.textContent = d || 'No Domain';
       if (d === cur) opt.selected = true;
       sel.appendChild(opt);
     }
@@ -2708,7 +2708,7 @@ function renderDomainSummary(domains) {
   section.classList.remove('hidden');
   document.getElementById('domain-summary-tbody').innerHTML = domains.map(d =>
     `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px;color:var(--blue)">${esc(d.domain) || '(no domain)'}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--blue)">${esc(d.domain) || 'No Domain'}</td>
       <td style="text-align:right;color:var(--text-muted)">${d.total.toLocaleString()}</td>
       <td style="text-align:right;color:var(--green)">${d.cracked.toLocaleString()}</td>
       <td style="text-align:right;color:var(--yellow)">${d.crack_rate}%</td>
@@ -3606,7 +3606,7 @@ function buildCompareChips(domains) {
   }
 
   chipsEl.innerHTML = domains.map(d =>
-    `<span class="domain-chip${compareState.selected.has(d) ? ' selected' : ''}" data-domain="${esc(d)}" onclick="toggleDomainChip(this)">${esc(d) || '(no domain)'}</span>`
+    `<span class="domain-chip${compareState.selected.has(d) ? ' selected' : ''}" data-domain="${esc(d)}" onclick="toggleDomainChip(this)">${esc(d) || 'No Domain'}</span>`
   ).join('');
 
   renderDomainComparison();
@@ -3662,7 +3662,7 @@ async function renderDomainComparison() {
     wrap.innerHTML = `<div class="compare-grid" style="grid-template-columns:repeat(${cols},1fr)">
       ${results.map(({ domain, s }) => `
         <div class="compare-domain-card">
-          <div class="compare-domain-name" title="${esc(domain) || '(no domain)'}">${esc(domain) || '(no domain)'}</div>
+          <div class="compare-domain-name" title="${esc(domain) || 'No Domain'}">${esc(domain) || 'No Domain'}</div>
           <div class="compare-stats-row">
             <div class="compare-stat blue"><div class="cs-val">${s.total_users.toLocaleString()}</div><div class="cs-lbl">Users</div></div>
             <div class="compare-stat"><div class="cs-val">${s.machine_accounts.toLocaleString()}</div><div class="cs-lbl">Machines</div></div>
