@@ -127,6 +127,20 @@ def replace_session(data: dict) -> None:
 # Password matching
 # ---------------------------------------------------------------------------
 
+def _is_krbtgt(user: dict) -> bool:
+    """True for the KDC service account (RID 502) and RODC krbtgt_* variants.
+
+    Its password is machine-generated and never cracks, so it's excluded from
+    the crack rate and the uncracked-hash export — but it's operationally
+    critical (Golden Ticket / tier-0), so callers keep it visible and flagged.
+    RID 502 is the canonical signal; the name check catches RODC krbtgt_NNNNN.
+    """
+    if user.get("rid") == "502":
+        return True
+    un = user["username"].lower()
+    return un == "krbtgt" or un.startswith("krbtgt_")
+
+
 def apply_passwords() -> None:
     """Match cracked hashes from pot_hashes back to users and compute sharing counts.
 
@@ -143,6 +157,7 @@ def apply_passwords() -> None:
     for user in session["users"]:
         is_blank = user["nt_hash"] == BLANK_NT_HASH
         user["is_blank"] = is_blank
+        user["is_krbtgt"] = _is_krbtgt(user)
         user["password"] = "" if is_blank else ph.get(user["nt_hash"])
         # When this account's hash first entered the pot (real cracks only —
         # blank/uncracked have no crack event). None for pre-feature cracks.
@@ -276,7 +291,10 @@ def get_filtered_users(
                     return False
             except ValueError:
                 return False
-        if tier0_only and not check_is_tier0(u["username"], u["domain"], tier0_lookup):
+        # krbtgt is always treated as tier-0 (its hash is critical), even when
+        # no tier-0 list is loaded.
+        is_t0 = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
+        if tier0_only and not is_t0:
             return False
         if s_lower:
             if search_field == "username":
@@ -324,7 +342,7 @@ def get_filtered_users(
             u_out["history"] = history_map.get(key, [])
         else:
             u_out["history"] = []
-        u_out["is_tier0"] = check_is_tier0(u["username"], u["domain"], tier0_lookup)
+        u_out["is_tier0"] = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
         ck = f"{u['domain'].lower()}/{u['username'].lower()}"
         u_out["comment"] = comment_map.get(ck, "")
         result.append(u_out)

@@ -267,7 +267,10 @@ def get_stats():
         return True
 
     scoped     = [u for u in non_hist if in_scope(u)]
-    user_accts = [u for u in scoped if not u["is_machine"]]
+    # krbtgt never cracks and isn't a real crack target — keep it out of the
+    # user-account population that drives the crack rate.
+    krbtgt     = [u for u in scoped if u.get("is_krbtgt")]
+    user_accts = [u for u in scoped if not u["is_machine"] and not u.get("is_krbtgt")]
     machines   = [u for u in scoped if u["is_machine"]]
     # History count is always global (not filtered)
     hist_entries = [u for u in all_u if u["is_history"]]
@@ -298,6 +301,7 @@ def get_stats():
             "cracked":          len(cracked),
             "uncracked":        len(user_accts) - len(cracked) - len(blank),
             "blank":            len(blank),
+            "krbtgt":           len(krbtgt),
             "crack_rate":       rate,
             "top_passwords":    [{"password": p, "count": c} for p, c in top_pw],
             "domains":          domains,
@@ -317,7 +321,7 @@ def get_analysis():
 
     scope_users = [
         u for u in session["users"]
-        if not u["is_history"] and not u["is_machine"]
+        if not u["is_history"] and not u["is_machine"] and not u.get("is_krbtgt")
         and (domain == "all" or u["domain"] == domain)
         and (source == "all" or u.get("dump_source", "") == source)
         and (not excluded or u["domain"] not in excluded)
@@ -351,6 +355,8 @@ def uncracked_hashes():
         # already known-blank.
         if u["is_history"] or u["password"] is not None:
             continue
+        if u.get("is_krbtgt"):
+            continue  # never a crack target — don't waste a hashcat slot on it
         if u["is_machine"] and not include_machines:
             continue
         if excluded and u["domain"] in excluded:
@@ -409,7 +415,7 @@ def get_domain_analysis():
     users = session.get("users", [])
     domains = {}
     for u in users:
-        if u["is_history"] or u["is_machine"]:
+        if u["is_history"] or u["is_machine"] or u.get("is_krbtgt"):
             continue
         if excluded and u["domain"] in excluded:
             continue

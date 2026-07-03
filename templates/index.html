@@ -552,6 +552,12 @@
       vertical-align: middle; white-space: nowrap; letter-spacing: .04em;
     }
     tr.row-tier0 > td:first-child { border-left: 2px solid rgba(248,81,73,.5); }
+    .badge-krbtgt {
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+      background: var(--purple-dim); color: var(--purple);
+      border: 1px solid var(--purple); margin-left: 6px;
+      vertical-align: middle; white-space: nowrap; letter-spacing: .04em;
+    }
 
     /* ── Pagination ──────────────────────────────────────────────────── */
     .pagination {
@@ -3077,9 +3083,10 @@ function renderHashesTable(users) {
   tbody.innerHTML = users.map(u => {
     const srcLabel   = u.dump_source || '—';
     const tier0Badge = u.is_tier0 ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
+    const krbtgtBadge = u.is_krbtgt ? '<span class="badge-krbtgt" title="KDC service account — never cracks">krbtgt</span>' : '';
     const rowClass = [u.is_machine ? 'row-machine' : '', u.is_tier0 ? 'row-tier0' : ''].filter(Boolean).join(' ');
     return `<tr class="${rowClass}">
-      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
+      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td>${hashCol(u.nt_hash)}</td>
       <td>${hashCol(u.aes256)}</td>
@@ -3144,9 +3151,11 @@ function renderTable(users) {
     const hasHist     = history.length > 0;
     const histCracked = history.filter(h => h.password != null);
 
-    /* Tier-0 badge */
+    /* Tier-0 / krbtgt badges */
     const tier0Badge = u.is_tier0
       ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
+    const krbtgtBadge = u.is_krbtgt
+      ? '<span class="badge-krbtgt" title="KDC service account — never cracks; excluded from crack rate and the uncracked-hash export">krbtgt</span>' : '';
 
     /* Password cell */
     let pwHtml;
@@ -3190,7 +3199,7 @@ function renderTable(users) {
       ? `<td style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="Added ${esc(new Date(u.cracked_at).toLocaleString())}">${rel}</td>`
       : '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     rows.push(`<tr class="${rowClass}">
-      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}</td>
+      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
       <td>${hashCell(u.nt_hash)}</td>
