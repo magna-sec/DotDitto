@@ -490,7 +490,10 @@
     .htag {
       font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
       letter-spacing: .03em; white-space: nowrap; border: 1px solid;
+      cursor: pointer; transition: filter .12s;
     }
+    .htag:hover { filter: brightness(1.35); }
+    body.client-mode .htag { pointer-events: none; }
     .htag.nt  { color: var(--text-muted); background: var(--surface3); border-color: var(--border2); }
     .htag.lm  { color: var(--yellow); background: var(--yellow-dim); border-color: rgba(227,179,65,.4); }
     .htag.krb { color: var(--blue);   background: var(--blue-dim);   border-color: rgba(88,166,255,.4); }
@@ -2501,6 +2504,29 @@ function copyLm(idx) {
   if (u && u.lm_password) copyText(u.lm_password);
 }
 
+/* Copy a specific hash type for a user from the Hash Types tags. */
+function copyHashType(idx, type) {
+  const u = _pageUsers[idx];
+  if (!u) return;
+  const map = {
+    nt:     ['NT hash',    u.nt_hash],
+    lm:     ['LM hash',    u.lm_hash],
+    aes256: ['AES-256 key', u.aes256],
+    aes128: ['AES-128 key', u.aes128],
+    des:    ['DES key',     u.des],
+  };
+  const entry = map[type];
+  if (!entry) return;
+  const [label, val] = entry;
+  if (!val) { toast(`No ${label} for this account`, 'info'); return; }
+  navigator.clipboard.writeText(val).catch(() => {
+    const el = document.createElement('textarea');
+    el.value = val; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+  });
+  toast(`Copied ${label}`, 'success', 1500);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Filtering & pagination
 ══════════════════════════════════════════════════════════════════════════ */
@@ -3204,12 +3230,15 @@ function renderTable(users) {
     const krbtgtBadge = u.is_krbtgt
       ? '<span class="badge-krbtgt" title="KDC service account — never cracks; excluded from crack rate and the uncracked-hash export">krbtgt</span>' : '';
 
-    /* Hash Types column — which hash types the dump holds for this account */
-    const htags = ['<span class="htag nt" title="NT hash (NTLM / RC4)">NT</span>'];
-    if (u.has_lm) htags.push('<span class="htag lm" title="LM hash present — LM hashing enabled; legacy and trivially crackable">LM</span>');
-    if (u.aes256) htags.push('<span class="htag krb" title="Kerberos AES-256 key">AES-256</span>');
-    if (u.aes128) htags.push('<span class="htag krb" title="Kerberos AES-128 key">AES-128</span>');
-    if (u.des)    htags.push('<span class="htag krb" title="Kerberos DES key">DES</span>');
+    /* Hash Types column — which hash types the dump holds. Each tag is
+       click-to-copy for that specific hash value. */
+    const htag = (cls, type, label, tip) =>
+      `<span class="htag ${cls}" title="${tip} — click to copy" onclick="event.stopPropagation();copyHashType(${i},'${type}')">${label}</span>`;
+    const htags = [htag('nt', 'nt', 'NT', 'NT hash (NTLM / RC4)')];
+    if (u.has_lm) htags.push(htag('lm',  'lm',     'LM',      'LM hash — legacy, trivially crackable'));
+    if (u.aes256) htags.push(htag('krb', 'aes256', 'AES-256', 'Kerberos AES-256 key'));
+    if (u.aes128) htags.push(htag('krb', 'aes128', 'AES-128', 'Kerberos AES-128 key'));
+    if (u.des)    htags.push(htag('krb', 'des',    'DES',     'Kerberos DES key'));
     const hashTypesCell = `<td><div class="htags">${htags.join('')}</div></td>`;
 
     /* Password cell */

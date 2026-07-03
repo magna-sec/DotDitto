@@ -9,6 +9,9 @@ from session_store import load_session_file
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB
+# Re-read templates from disk on each request so UI edits show on a plain
+# refresh (no restart needed). Cheap for a single-file template.
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 app.register_blueprint(bp)
 
