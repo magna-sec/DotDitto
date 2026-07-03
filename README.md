@@ -23,7 +23,7 @@
 - **Tier-0 user tracking** — load a list of privileged accounts (file, paste, or BloodHound Cypher query); matching rows are flagged with a `T0` badge and a red left border; filter the table to tier-0 accounts only
 - **Per-row notes** — click any Notes cell to attach a free-text annotation to an account (e.g. `SNOW Admin`, `Has 2 VDIs`); notes are saved in the session
 - **Client Mode** — blurs sensitive data for client-facing screen shares; independently toggle hiding of passwords/hashes and/or usernames
-- **Themes** — Dark (default), Professional (clean light), Terminal (green phosphor), Synthwave (retro neon), Classic (Windows 95)
+- **Themes** — Dark (default), Professional (clean light), Terminal (green phosphor), Synthwave (retro neon), Classic (Windows 95), Contrast (neon pink/cyan)
 - **Brightness slider** — fine-tune display brightness across any theme; setting is saved between sessions
 - **Wordlist exports**
   - All unique cracked passwords as a plain-text wordlist (`.txt`)
@@ -185,6 +185,7 @@ Click **Theme ▾** in the header to switch themes:
 | **Terminal** | Green phosphor on black |
 | **Synthwave** | Retro 80s neon purple |
 | **Classic** | Windows 95 era — raised 3D panels, teal desktop |
+| **Contrast** | Neon pink/cyan on near-black navy, glow accents |
 
 Use the **Brightness** slider in the same panel to fine-tune display brightness from 50% to 150%. The selected theme and brightness level are saved to `localStorage`.
 
