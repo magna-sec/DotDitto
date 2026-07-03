@@ -3751,10 +3751,23 @@ function openCommentPopover(e, cell) {
   const popover = document.getElementById('comment-popover');
   popover.classList.remove('hidden');
 
-  // Position: prefer below the cell, nudge left if it would clip the viewport
-  const rect = cell.getBoundingClientRect();
-  const top  = rect.bottom + 6;
-  const left = Math.min(rect.left, window.innerWidth - 316);
+  // Position: prefer below the cell, but keep the whole popover on screen.
+  // Un-hidden above so offsetWidth/Height reflect the rendered size.
+  const rect   = cell.getBoundingClientRect();
+  const margin = 8;
+  const pw = popover.offsetWidth  || 300;
+  const ph = popover.offsetHeight || 160;
+
+  let left = Math.min(rect.left, window.innerWidth - pw - margin);
+  left = Math.max(margin, left);
+
+  let top = rect.bottom + 6;
+  if (top + ph > window.innerHeight - margin) {
+    // Would overflow the bottom — flip above the cell; if it still doesn't
+    // fit, pin it just inside the bottom edge so Save stays reachable.
+    const above = rect.top - ph - 6;
+    top = above >= margin ? above : Math.max(margin, window.innerHeight - ph - margin);
+  }
   popover.style.top  = top  + 'px';
   popover.style.left = left + 'px';
 
