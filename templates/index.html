@@ -485,6 +485,16 @@
       margin-left: 6px; vertical-align: middle; letter-spacing: .04em; text-transform: uppercase;
     }
 
+    /* ── Hash-type tags (Overview table) ─────────────────────────────── */
+    .htags { display: flex; gap: 4px; flex-wrap: wrap; }
+    .htag {
+      font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
+      letter-spacing: .03em; white-space: nowrap; border: 1px solid;
+    }
+    .htag.nt  { color: var(--text-muted); background: var(--surface3); border-color: var(--border2); }
+    .htag.lm  { color: var(--yellow); background: var(--yellow-dim); border-color: rgba(227,179,65,.4); }
+    .htag.krb { color: var(--blue);   background: var(--blue-dim);   border-color: rgba(88,166,255,.4); }
+
     .badge {
       display: inline-block; padding: 1px 7px; border-radius: 4px;
       font-size: 11px; font-weight: 500; line-height: 1.6;
@@ -1886,7 +1896,8 @@ RETURN n</pre>
               <th onclick="sortBy('username')">Username<span class="sort-arrow" id="sa-username"></span></th>
               <th onclick="sortBy('domain')">Domain<span class="sort-arrow" id="sa-domain"></span></th>
               <th onclick="sortBy('rid')">RID<span class="sort-arrow" id="sa-rid"></span></th>
-              <th>NTLM Hash</th>
+              <th>NT Hash</th>
+              <th title="Which hash types this account has stored in the dump">Hash Types</th>
               <th onclick="sortBy('password')">Password<span class="sort-arrow" id="sa-password"></span></th>
               <th onclick="sortBy('pw_len')" title="Sort by password length" style="width:46px;text-align:center">Len<span class="sort-arrow" id="sa-pw_len"></span></th>
               <th onclick="sortBy('cracked_at')" title="When this cracked password was added (from a pot upload). Sort to surface recent additions.">Added<span class="sort-arrow" id="sa-cracked_at"></span></th>
@@ -3175,7 +3186,7 @@ function renderTable(users) {
   _pageUsers = users;
   const tbody = document.getElementById('table-body');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateSortArrows();
     return;
   }
@@ -3187,13 +3198,19 @@ function renderTable(users) {
     const hasHist     = history.length > 0;
     const histCracked = history.filter(h => h.password != null);
 
-    /* Tier-0 / krbtgt / LM badges */
+    /* Tier-0 / krbtgt badges (LM is now shown in the Hash Types column) */
     const tier0Badge = u.is_tier0
       ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
     const krbtgtBadge = u.is_krbtgt
       ? '<span class="badge-krbtgt" title="KDC service account — never cracks; excluded from crack rate and the uncracked-hash export">krbtgt</span>' : '';
-    const lmBadge = u.has_lm
-      ? '<span class="badge-lm" title="Real LM hash present — LM hashing enabled; legacy and trivially crackable. See the LM Hash column in the All Hashes tab.">LM</span>' : '';
+
+    /* Hash Types column — which hash types the dump holds for this account */
+    const htags = ['<span class="htag nt" title="NT hash (NTLM / RC4)">NT</span>'];
+    if (u.has_lm) htags.push('<span class="htag lm" title="LM hash present — LM hashing enabled; legacy and trivially crackable">LM</span>');
+    if (u.aes256) htags.push('<span class="htag krb" title="Kerberos AES-256 key">AES-256</span>');
+    if (u.aes128) htags.push('<span class="htag krb" title="Kerberos AES-128 key">AES-128</span>');
+    if (u.des)    htags.push('<span class="htag krb" title="Kerberos DES key">DES</span>');
+    const hashTypesCell = `<td><div class="htags">${htags.join('')}</div></td>`;
 
     /* Password cell */
     let pwHtml;
@@ -3246,10 +3263,11 @@ function renderTable(users) {
       ? `<td style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="Added ${esc(new Date(u.cracked_at).toLocaleString())}">${rel}</td>`
       : '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     rows.push(`<tr class="${rowClass}">
-      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}${lmBadge}</td>
+      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
       <td>${hashCell(u.nt_hash)}</td>
+      ${hashTypesCell}
       <td>${pwHtml}</td>
       ${pwLenCell}
       ${crackedCell}
