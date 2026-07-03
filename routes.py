@@ -13,6 +13,7 @@ from flask import Blueprint, Response, jsonify, request
 from analysis import build_word_wordlist, run_analysis
 from parsers import parse_pot_file, parse_secretsdump
 from session_store import (
+    BLANK_NT_HASH,
     apply_passwords,
     clear_session,
     get_filtered_users,
@@ -190,13 +191,18 @@ def get_users():
     pages  = max(1, (total + per_page - 1) // per_page)
     start  = (page - 1) * per_page
 
-    # Compute top passwords and cracked count from the full filtered result
+    # Compute top passwords and cracked count from the full filtered result.
+    # Blank/disabled accounts count as cracked but are excluded from the
+    # top-passwords list — an empty plaintext isn't a meaningful pattern.
     pw_freq: dict[str, int] = {}
     cracked_count = 0
     for u in users:
-        if u.get("password") and not u.get("is_history") and not u.get("is_machine"):
-            pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
+        if u.get("is_history") or u.get("is_machine"):
+            continue
+        if u.get("password") is not None:
             cracked_count += 1
+            if not u.get("is_blank") and u["password"]:
+                pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
     return jsonify(
@@ -236,11 +242,13 @@ def get_stats():
     machines   = [u for u in scoped if u["is_machine"]]
     # History count is always global (not filtered)
     hist_entries = [u for u in all_u if u["is_history"]]
-    cracked    = [u for u in user_accts if u["password"]]
+    cracked    = [u for u in user_accts if u["password"] is not None]
+    blank      = [u for u in cracked if u.get("is_blank")]
 
     pw_freq: dict[str, int] = {}
     for u in cracked:
-        pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
+        if not u.get("is_blank"):
+            pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     top_pw = sorted(pw_freq.items(), key=lambda x: x[1], reverse=True)[:15]
 
     # Domain/source dropdowns always show all options regardless of current filter
@@ -255,6 +263,7 @@ def get_stats():
             "history_entries":  len(hist_entries),
             "cracked":          len(cracked),
             "uncracked":        len(user_accts) - len(cracked),
+            "blank":            len(blank),
             "crack_rate":       rate,
             "top_passwords":    [{"password": p, "count": c} for p, c in top_pw],
             "domains":          domains,
@@ -279,13 +288,18 @@ def get_analysis():
         and (source == "all" or u.get("dump_source", "") == source)
         and (not excluded or u["domain"] not in excluded)
     ]
-    cracked_pws  = [u["password"] for u in scope_users if u["password"]]
-    total_scope  = len(scope_users)
-    crack_rate   = round(len(cracked_pws) / total_scope * 100, 1) if total_scope else 0.0
+    # Blank/disabled accounts (password == "") count toward the crack rate but
+    # are excluded from composition analysis — an empty plaintext has no mask,
+    # length, or character-class pattern worth aggregating.
+    cracked_pws   = [u["password"] for u in scope_users if u["password"]]
+    cracked_count = sum(1 for u in scope_users if u["password"] is not None)
+    total_scope   = len(scope_users)
+    crack_rate    = round(cracked_count / total_scope * 100, 1) if total_scope else 0.0
 
     result = run_analysis(cracked_pws)
-    result["crack_rate"]   = crack_rate
-    result["total_scope"]  = total_scope
+    result["crack_rate"]    = crack_rate
+    result["total_scope"]   = total_scope
+    result["cracked_count"] = cracked_count
     return jsonify(result)
 
 
@@ -297,7 +311,10 @@ def uncracked_hashes():
     seen:   set  = set()
     hashes: list = []
     for u in session["users"]:
-        if u["is_history"] or u["password"]:
+        # password is not None covers blank/disabled accounts too (password
+        # == ""), so they stop being resubmitted to the cracking effort once
+        # already known-blank.
+        if u["is_history"] or u["password"] is not None:
             continue
         if u["is_machine"] and not include_machines:
             continue
@@ -365,7 +382,7 @@ def get_domain_analysis():
         if d not in domains:
             domains[d] = {"total": 0, "cracked": 0}
         domains[d]["total"] += 1
-        if u["password"]:
+        if u["password"] is not None:
             domains[d]["cracked"] += 1
     result = []
     for domain, stats in sorted(domains.items()):
@@ -398,14 +415,15 @@ def export_csv():
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
-                "Shared Count", "Machine", "History", "Hist Index", "Source"])
+                "Blank/Disabled", "Shared Count", "Machine", "History", "Hist Index", "Source"])
     for u in users:
         w.writerow(
             [
                 u["username"], u["domain"], u["rid"],
                 u["lm_hash"], u["nt_hash"],
-                u["password"] or "",
-                u["password_count"] if u["password"] else "",
+                "(blank)" if u.get("is_blank") else (u["password"] or ""),
+                "Yes" if u.get("is_blank") else "No",
+                u["password_count"] if u["password"] is not None else "",
                 "Yes" if u["is_machine"] else "No",
                 "Yes" if u["is_history"] else "No",
                 u["hist_index"] if u["hist_index"] >= 0 else "",
@@ -432,12 +450,10 @@ def export_reuse_report():
         and (not excluded or u["domain"] not in excluded)
     ]
 
-    BLANK_NT = "31d6cfe0d16ae931b73c59d7e0c089c0"
-
     hash_groups: dict = defaultdict(list)
     for u in users:
         h = u.get("nt_hash", "")
-        if h and len(h) == 32 and h.lower() != BLANK_NT:
+        if h and len(h) == 32 and h.lower() != BLANK_NT_HASH:
             hash_groups[h].append(u)
 
     duplicates = {h: g for h, g in hash_groups.items() if len(g) > 1}
@@ -595,9 +611,7 @@ def clear_all():
 @bp.route("/api/clear/pot", methods=["POST"])
 def clear_pot():
     session["pot_hashes"] = {}
-    for u in session["users"]:
-        u["password"]       = None
-        u["password_count"] = 1
     session["metadata"]["pot_sources"] = []
+    apply_passwords()  # re-derive password/is_blank so blank accounts stay marked cracked
     save_session()
     return jsonify({"success": True})

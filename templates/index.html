@@ -472,6 +472,7 @@
     .pw-cracked { color: var(--green); font-weight: 600; }
     .pw-shared  { font-size: 10px; color: var(--yellow); background: var(--yellow-dim); padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
     .pw-none    { color: var(--red); font-size: 12px; }
+    .pw-blank   { color: var(--yellow); font-weight: 600; font-size: 12px; letter-spacing: .02em; }
 
     .badge {
       display: inline-block; padding: 1px 7px; border-radius: 4px;
@@ -1012,6 +1013,7 @@
     }
     body[data-theme="classic"] tbody tr:hover .pw-cracked { color: #88ff88 !important; }
     body[data-theme="classic"] tbody tr:hover .pw-none    { color: #ffaaaa !important; }
+    body[data-theme="classic"] tbody tr:hover .pw-blank   { color: #ffff88 !important; }
     body[data-theme="classic"] tbody tr:hover .hash-text  { color: #ccccff !important; }
     body[data-theme="classic"] tbody tr:hover .copy-btn   { color: #cccccc !important; }
     body[data-theme="classic"] .pagination {
@@ -1089,6 +1091,7 @@
     /* Passwords in table */
     body[data-theme="classic"] .pw-cracked { color: #006400 !important; }
     body[data-theme="classic"] .pw-none    { color: #8b0000 !important; }
+    body[data-theme="classic"] .pw-blank   { color: #808000 !important; }
     body[data-theme="classic"] .hash-text  { color: #404040 !important; }
 
     /* Top passwords chart */
@@ -1277,6 +1280,162 @@
     body[data-theme="professional"] .hist-summary.has-cracked { background: var(--green-dim); color: var(--green); }
     body[data-theme="professional"] a { color: var(--blue); }
 
+    /* ══════════════════════════════════════════════════════════════════════
+       Theme: High Contrast  (WCAG AAA — pure black/white, thick borders)
+    ══════════════════════════════════════════════════════════════════════ */
+    body[data-theme="high-contrast"] {
+      --bg:          #000000;
+      --surface:     #000000;
+      --surface2:    #0d0d0d;
+      --surface3:    #1a1a1a;
+      --border:      #ffffff;
+      --border2:     #ffffff;
+      --text:        #ffffff;
+      --text-muted:  #d0d7de;
+      --green:       #2ee858;
+      --green-dim:   rgba(46,232,88,.2);
+      --red:         #ff9492;
+      --red-dim:     rgba(255,148,146,.2);
+      --yellow:      #ffd23f;
+      --yellow-dim:  rgba(255,210,63,.2);
+      --blue:        #7fbcff;
+      --blue-dim:    rgba(127,188,255,.18);
+      --purple:      #d3a8ff;
+      --purple-dim:  rgba(211,168,255,.18);
+      --font-mono:   'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    }
+    /* Strong, always-visible focus ring — the core of a usable high-contrast mode */
+    body[data-theme="high-contrast"] a:focus-visible,
+    body[data-theme="high-contrast"] button:focus-visible,
+    body[data-theme="high-contrast"] input:focus-visible,
+    body[data-theme="high-contrast"] select:focus-visible,
+    body[data-theme="high-contrast"] textarea:focus-visible,
+    body[data-theme="high-contrast"] [tabindex]:focus-visible {
+      outline: 3px solid var(--yellow) !important;
+      outline-offset: 2px !important;
+    }
+    body[data-theme="high-contrast"] header {
+      background: #000000;
+      border-bottom: 2px solid #ffffff;
+    }
+    body[data-theme="high-contrast"] .brand-logo {
+      background: #000000 !important;
+      border: 2px solid #ffffff !important;
+      color: #ffffff !important;
+    }
+    body[data-theme="high-contrast"] .brand-text h1   { color: #ffffff !important; font-weight: 700; }
+    body[data-theme="high-contrast"] .brand-text .subtitle { color: #d0d7de !important; }
+    body[data-theme="high-contrast"] .header-badge {
+      background: #000000 !important;
+      border: 2px solid #ffffff !important;
+      color: #ffffff !important;
+    }
+    body[data-theme="high-contrast"] #session-indicator { color: #ffffff; }
+    body[data-theme="high-contrast"] .dot { background: #ffffff; border: 1px solid #ffffff; }
+    body[data-theme="high-contrast"] .dot.on { background: var(--green); }
+    body[data-theme="high-contrast"] .upload-card,
+    body[data-theme="high-contrast"] .stat-card,
+    body[data-theme="high-contrast"] .top-pw-card,
+    body[data-theme="high-contrast"] .table-wrap,
+    body[data-theme="high-contrast"] .analysis-card,
+    body[data-theme="high-contrast"] .compare-section,
+    body[data-theme="high-contrast"] .compare-domain-card,
+    body[data-theme="high-contrast"] .mini-card,
+    body[data-theme="high-contrast"] .complexity-card,
+    body[data-theme="high-contrast"] .reuse-pill,
+    body[data-theme="high-contrast"] .domain-panel,
+    body[data-theme="high-contrast"] .client-opts-panel {
+      background: #000000 !important;
+      border: 2px solid #ffffff !important;
+      box-shadow: none !important;
+    }
+    body[data-theme="high-contrast"] .btn {
+      background: #000000; border: 2px solid #ffffff; color: #ffffff;
+    }
+    body[data-theme="high-contrast"] .btn:hover { background: #ffffff !important; color: #000000 !important; }
+    body[data-theme="high-contrast"] .btn.primary { background: var(--yellow) !important; border-color: var(--yellow) !important; color: #000000 !important; font-weight: 700; }
+    body[data-theme="high-contrast"] .btn.primary:hover { background: #ffffff !important; border-color: #ffffff !important; }
+    body[data-theme="high-contrast"] .btn.danger { border-color: var(--red) !important; color: var(--red) !important; }
+    body[data-theme="high-contrast"] .btn.danger:hover { background: var(--red) !important; color: #000000 !important; }
+    body[data-theme="high-contrast"] .client-btn { border-color: var(--purple) !important; color: var(--purple) !important; }
+    body[data-theme="high-contrast"] .client-btn.active { background: var(--purple) !important; color: #000000 !important; }
+    body[data-theme="high-contrast"] .client-chevron { border-color: var(--purple) !important; color: var(--purple) !important; }
+    body[data-theme="high-contrast"] thead { background: #000000; border-bottom: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] th { color: #ffffff; font-weight: 700; border-bottom: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] th:hover { color: var(--yellow) !important; }
+    body[data-theme="high-contrast"] td { border-bottom: 1px solid #ffffff; }
+    body[data-theme="high-contrast"] tbody tr:hover td { background: #1a1a1a !important; outline: 1px solid #ffffff; outline-offset: -1px; }
+    body[data-theme="high-contrast"] .pagination { background: #000000; border-top: 2px solid #ffffff; color: #ffffff; }
+    body[data-theme="high-contrast"] .search-input,
+    body[data-theme="high-contrast"] .modal textarea,
+    body[data-theme="high-contrast"] .comment-popover textarea,
+    body[data-theme="high-contrast"] #modal-source-input {
+      background: #000000; border: 2px solid #ffffff; color: #ffffff;
+    }
+    body[data-theme="high-contrast"] .search-input:focus,
+    body[data-theme="high-contrast"] .modal textarea:focus,
+    body[data-theme="high-contrast"] #modal-source-input:focus { border-color: var(--yellow); }
+    body[data-theme="high-contrast"] .toolbar select,
+    body[data-theme="high-contrast"] .analysis-toolbar select,
+    body[data-theme="high-contrast"] #per-page-sel,
+    body[data-theme="high-contrast"] #hash-per-page-sel { background: #000000; color: #ffffff; border: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .drop-zone { background: #000000; border: 2px dashed #ffffff; }
+    body[data-theme="high-contrast"] .drop-zone:hover,
+    body[data-theme="high-contrast"] .drop-zone.drag-over { background: var(--yellow-dim); border-color: var(--yellow); }
+    body[data-theme="high-contrast"] .drop-zone.loaded { border-color: var(--green); border-style: solid; }
+    body[data-theme="high-contrast"] .drop-zone p { color: #ffffff; }
+    body[data-theme="high-contrast"] .modal,
+    body[data-theme="high-contrast"] .hist-modal { background: #000000; border: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .modal h3 { color: #ffffff; }
+    body[data-theme="high-contrast"] .hist-modal-hdr { background: #000000; border-bottom: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .hist-modal-title { color: #ffffff !important; }
+    body[data-theme="high-contrast"] .hist-modal-sub   { color: #d0d7de !important; }
+    body[data-theme="high-contrast"] .hist-modal-close { color: #ffffff !important; }
+    body[data-theme="high-contrast"] .hist-card { background: #000000; border: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .hist-card.is-cracked { border-color: var(--green); }
+    body[data-theme="high-contrast"] .hist-card.is-current { border-color: var(--blue); }
+    body[data-theme="high-contrast"] .hist-timeline::before { background: #ffffff; }
+    body[data-theme="high-contrast"] .hist-dot { background: #000000; border: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .hist-dot.is-current { background: var(--blue); border-color: var(--blue); }
+    body[data-theme="high-contrast"] .hist-dot.is-cracked { background: var(--green); border-color: var(--green); }
+    body[data-theme="high-contrast"] .hf-copy { background: #000000; border: 1px solid #ffffff; color: #ffffff; }
+    body[data-theme="high-contrast"] .comment-popover { background: #000000; border: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .comment-popover-hdr { color: #ffffff; }
+    body[data-theme="high-contrast"] .cp-user { color: var(--blue); }
+    body[data-theme="high-contrast"] .tab-bar { border-bottom: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .tab-btn { color: #d0d7de; }
+    body[data-theme="high-contrast"] .tab-btn:hover { color: #ffffff; }
+    body[data-theme="high-contrast"] .tab-btn.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+    body[data-theme="high-contrast"] .toast { background: #000000; border: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .toast.success { border-left: 4px solid var(--green) !important; }
+    body[data-theme="high-contrast"] .toast.error   { border-left: 4px solid var(--red) !important; }
+    body[data-theme="high-contrast"] .toast.info    { border-left: 4px solid var(--blue) !important; }
+    body[data-theme="high-contrast"] .masks-table th { background: #000000; color: #ffffff; border-bottom: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] .masks-table td { border-bottom: 1px solid #ffffff; }
+    body[data-theme="high-contrast"] .masks-table tr:hover td { background: #1a1a1a; }
+    body[data-theme="high-contrast"] .mask-str { background: #000000; border: 1px solid #ffffff; color: var(--blue); }
+    body[data-theme="high-contrast"] .pw-cracked { color: var(--green); font-weight: 700; }
+    body[data-theme="high-contrast"] .pw-none    { color: var(--red); font-weight: 700; }
+    body[data-theme="high-contrast"] .pw-blank   { color: var(--yellow); font-weight: 700; }
+    body[data-theme="high-contrast"] .hash-text  { color: #d0d7de; }
+    body[data-theme="high-contrast"] .badge-machine { background: #000000; border: 1px solid #ffffff; color: #d0d7de; }
+    body[data-theme="high-contrast"] .badge-tier0   { background: #000000; border: 2px solid var(--red); color: var(--red); }
+    body[data-theme="high-contrast"] .pw-bar-fill    { background: var(--yellow-dim) !important; border-left: 2px solid var(--yellow) !important; }
+    body[data-theme="high-contrast"] .word-bar-fill  { background: var(--purple-dim) !important; border-left: 2px solid var(--purple) !important; }
+    body[data-theme="high-contrast"] .prefix-bar-fill { background: var(--blue-dim) !important; border-left: 2px solid var(--blue) !important; }
+    body[data-theme="high-contrast"] .len-bar { background: var(--yellow-dim) !important; border-top: 2px solid var(--yellow) !important; }
+    body[data-theme="high-contrast"] .hist-summary { background: #000000; border: 1px solid var(--blue); color: var(--blue); }
+    body[data-theme="high-contrast"] .hist-summary.has-cracked { border-color: var(--green); color: var(--green); }
+    body[data-theme="high-contrast"] .client-mode-banner { background: #000000 !important; border: 2px solid var(--purple) !important; color: var(--purple) !important; }
+    body[data-theme="high-contrast"] a { color: var(--blue); text-decoration: underline; }
+    body[data-theme="high-contrast"] .domain-row { border-bottom: 1px solid #ffffff; }
+    body[data-theme="high-contrast"] .domain-panel-title { color: #ffffff; }
+    body[data-theme="high-contrast"] .domain-panel-hdr { border-bottom: 2px solid #ffffff; }
+    body[data-theme="high-contrast"] ::-webkit-scrollbar       { width: 16px; height: 16px; }
+    body[data-theme="high-contrast"] ::-webkit-scrollbar-track { background: #000000; border: 1px solid #ffffff; }
+    body[data-theme="high-contrast"] ::-webkit-scrollbar-thumb { background: #ffffff; border: 2px solid #000000; }
+    body[data-theme="high-contrast"] ::-webkit-scrollbar-corner { background: #000000; }
+
   </style>
 </head>
 <body>
@@ -1447,6 +1606,7 @@ RETURN n</pre>
           <button class="btn sm theme-opt" data-theme-option="terminal"     onclick="setTheme('terminal')">Terminal</button>
           <button class="btn sm theme-opt" data-theme-option="synthwave"    onclick="setTheme('synthwave')">Synthwave</button>
           <button class="btn sm theme-opt" data-theme-option="classic"      onclick="setTheme('classic')">Classic</button>
+          <button class="btn sm theme-opt" data-theme-option="high-contrast" onclick="setTheme('high-contrast')">High Contrast</button>
         </div>
         <div class="brightness-row">
           <div class="brightness-label">
@@ -2923,7 +3083,7 @@ function renderTable(users) {
     const u           = users[i];
     const history     = u.history || [];
     const hasHist     = history.length > 0;
-    const histCracked = history.filter(h => h.password);
+    const histCracked = history.filter(h => h.password != null);
 
     /* Tier-0 badge */
     const tier0Badge = u.is_tier0
@@ -2932,7 +3092,10 @@ function renderTable(users) {
     /* Password cell */
     let pwHtml;
     let pwLenCell = '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
-    if (u.password) {
+    if (u.is_blank) {
+      pwHtml = `<span class="pw-blank" title="Empty NT hash — blank password or disabled account">Blank/Disabled</span>`;
+      pwLenCell = '<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">0</td>';
+    } else if (u.password) {
       const _pw = decodePw(u.password);
       const shared = (u.password_count || 1) > 1
         ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
@@ -3003,7 +3166,7 @@ function openHistoryModal(idx) {
   if (!u) return;
 
   const history     = u.history || [];
-  const histCracked = history.filter(h => h.password).length;
+  const histCracked = history.filter(h => h.password != null).length;
 
   document.getElementById('hist-modal-title').textContent =
     (u.domain ? u.domain + '\\' : '') + u.username;
@@ -3014,14 +3177,14 @@ function openHistoryModal(idx) {
   /* Build password cache: [0] = current, [1..N] = sortedHist by hist_index */
   const sortedHist = [...history].sort((a, b) => a.hist_index - b.hist_index);
   _histPwCache = [
-    u.password ? decodePw(u.password) : null,
-    ...sortedHist.map(h => h.password ? decodePw(h.password) : null),
+    u.password != null ? decodePw(u.password) : null,
+    ...sortedHist.map(h => h.password != null ? decodePw(h.password) : null),
   ];
 
   let html = '<div class="hist-timeline">';
 
   /* ── Current entry (always at top) ── */
-  const curCracked = !!u.password;
+  const curCracked = u.password != null;
   html += `
     <div class="hist-entry">
       <div class="hist-dot is-current${curCracked ? ' is-cracked' : ''}"></div>
@@ -3034,7 +3197,9 @@ function openHistoryModal(idx) {
         </div>
         <div class="hf">
           <span class="hf-lbl">Password</span>
-          ${curCracked
+          ${u.is_blank
+            ? `<span class="hf-val cracked pw-blank">Blank/Disabled</span>`
+            : curCracked
             ? `<span class="hf-val cracked">${esc(decodePw(u.password))}</span>
                <button class="hf-copy" onclick="copyHistPw(0)">copy</button>`
             : `<span class="hf-val unknown">not cracked</span>`
@@ -3048,7 +3213,7 @@ function openHistoryModal(idx) {
     html += `<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No history entries in this dump.</div>`;
   } else {
     sortedHist.forEach((h, pos) => {
-      const cracked     = !!h.password;
+      const cracked     = h.password != null;
       const reused      = h.nt_hash === u.nt_hash;
       const reusedBadge = reused
         ? `<span class="heh-reused">⚠ same hash as current</span>` : '';
@@ -3073,7 +3238,9 @@ function openHistoryModal(idx) {
             </div>
             <div class="hf">
               <span class="hf-lbl">Password</span>
-              ${cracked
+              ${h.is_blank
+                ? `<span class="hf-val cracked pw-blank">Blank/Disabled</span>`
+                : cracked
                 ? `<span class="hf-val cracked">${esc(decodePw(h.password))}</span>
                    <button class="hf-copy" onclick="copyHistPw(${pos + 1})">copy</button>`
                 : `<span class="hf-val unknown">not cracked</span>`
@@ -3624,7 +3791,7 @@ function setTier0Status(count, label) {
 /* ══════════════════════════════════════════════════════════════════════════
    Themes
 ══════════════════════════════════════════════════════════════════════════ */
-const _THEME_LABELS = { dark: 'Dark', professional: 'Professional', terminal: 'Terminal', synthwave: 'Synthwave', classic: 'Classic' };
+const _THEME_LABELS = { dark: 'Dark', professional: 'Professional', terminal: 'Terminal', synthwave: 'Synthwave', classic: 'Classic', 'high-contrast': 'High Contrast' };
 let _currentTheme = localStorage.getItem('theme') || 'dark';
 
 function setTheme(name) {

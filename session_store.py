@@ -8,6 +8,11 @@ from datetime import datetime
 
 SESSION_FILE = "session.json"
 
+# MD4("") — the NT hash of an empty password. Shows up for accounts with a
+# literally blank password, and is also what AD stores for many disabled
+# accounts. Treated as "cracked" without needing a pot file entry.
+BLANK_NT_HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
+
 # ---------------------------------------------------------------------------
 # In-memory session
 # ---------------------------------------------------------------------------
@@ -55,6 +60,7 @@ def load_session_file() -> None:
                 u.setdefault("aes128", None)
                 u.setdefault("des", None)
                 u.setdefault("dump_source", "")
+            apply_passwords()
             n_users = len([u for u in session["users"] if not u.get("is_history") and not u.get("is_machine")])
             n_pot = len(session.get("pot_hashes", {}))
             print(f"[info] loaded session: {n_users} user accounts, {n_pot} pot hashes")
@@ -106,13 +112,24 @@ def replace_session(data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def apply_passwords() -> None:
-    """Match cracked hashes from pot_hashes back to users and compute sharing counts."""
+    """Match cracked hashes from pot_hashes back to users and compute sharing counts.
+
+    Accounts whose NT hash is BLANK_NT_HASH are always treated as cracked
+    (password == "") regardless of whether a pot file covers them — there's
+    nothing to crack, the hash already proves the password is blank. They're
+    flagged via is_blank so callers can label them instead of displaying an
+    empty plaintext, and they stay out of password-reuse counts below since
+    "everyone with a blank password" isn't meaningful reuse.
+    """
     ph = session["pot_hashes"]
 
     for user in session["users"]:
-        user["password"] = ph.get(user["nt_hash"])
+        is_blank = user["nt_hash"] == BLANK_NT_HASH
+        user["is_blank"] = is_blank
+        user["password"] = "" if is_blank else ph.get(user["nt_hash"])
 
-    # Count how many (non-history) user accounts share each plaintext
+    # Count how many (non-history) user accounts share each plaintext.
+    # Blank passwords (falsy "") are naturally excluded here.
     pw_counts: dict[str, int] = {}
     for user in session["users"]:
         if user["password"] and not user["is_history"]:
@@ -210,9 +227,9 @@ def get_filtered_users(
         if exclude_domains and u["domain"] in exclude_domains:
             return False
         if check_cracked:
-            if cracked == "cracked" and not u["password"]:
+            if cracked == "cracked" and u["password"] is None:
                 return False
-            if cracked == "uncracked" and u["password"]:
+            if cracked == "uncracked" and u["password"] is not None:
                 return False
         if tier0_only and not check_is_tier0(u["username"], u["domain"], tier0_lookup):
             return False
@@ -224,13 +241,13 @@ def get_filtered_users(
             elif search_field == "hash":
                 match = s_lower in u["nt_hash"]
             elif search_field == "password":
-                match = bool(u["password"]) and s_lower in u["password"].lower()
+                match = u["password"] is not None and s_lower in u["password"].lower()
             else:
                 match = (
                     s_lower in u["username"].lower()
                     or s_lower in u["domain"].lower()
                     or s_lower in u["nt_hash"]
-                    or (u["password"] and s_lower in u["password"].lower())
+                    or (u["password"] is not None and s_lower in u["password"].lower())
                 )
             if not match:
                 return False
@@ -246,7 +263,7 @@ def get_filtered_users(
         "rid":      lambda u: int(u["rid"]) if u["rid"].isdigit() else 0,
         "nt_hash":  lambda u: u["nt_hash"],
         "password": lambda u: (u["password"] or "").lower(),
-        "pw_len":   lambda u: len(u["password"]) if u["password"] else -1,
+        "pw_len":   lambda u: len(u["password"]) if u["password"] is not None else -1,
     }
     if sort_by in _sort_keys:
         filtered.sort(key=_sort_keys[sort_by], reverse=reverse)
