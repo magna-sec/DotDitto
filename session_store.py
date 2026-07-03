@@ -13,6 +13,11 @@ SESSION_FILE = "session.json"
 # accounts. Treated as "cracked" without needing a pot file entry.
 BLANK_NT_HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 
+# LM hash of an empty password — what AD stores when LM hashing is disabled
+# (NoLMHash, default since Vista/2008). Any other value means a *real* LM hash
+# is present: legacy, ≤14 chars, uppercased, DES — trivially crackable.
+EMPTY_LM_HASH = "aad3b435b51404eeaad3b435b51404ee"
+
 # ---------------------------------------------------------------------------
 # In-memory session
 # ---------------------------------------------------------------------------
@@ -141,6 +146,18 @@ def _is_krbtgt(user: dict) -> bool:
     return un == "krbtgt" or un.startswith("krbtgt_")
 
 
+def _has_lm(user: dict) -> bool:
+    """True when a real LM hash is stored (LM hashing was enabled for this
+    account). The empty placeholder and the 'NO PASSWORD' marker don't count.
+    """
+    lm = (user.get("lm_hash") or "").lower()
+    return (
+        len(lm) == 32
+        and lm != EMPTY_LM_HASH
+        and all(c in "0123456789abcdef" for c in lm)
+    )
+
+
 def apply_passwords() -> None:
     """Match cracked hashes from pot_hashes back to users and compute sharing counts.
 
@@ -158,6 +175,7 @@ def apply_passwords() -> None:
         is_blank = user["nt_hash"] == BLANK_NT_HASH
         user["is_blank"] = is_blank
         user["is_krbtgt"] = _is_krbtgt(user)
+        user["has_lm"] = _has_lm(user)
         user["password"] = "" if is_blank else ph.get(user["nt_hash"])
         # When this account's hash first entered the pot (real cracks only —
         # blank/uncracked have no crack event). None for pre-feature cracks.
