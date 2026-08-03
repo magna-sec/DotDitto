@@ -168,6 +168,28 @@ def parse_pot_file(text: str) -> dict:
     return pot
 
 
+def parse_known_passwords(text: str) -> list:
+    """Parse a list of *known* plaintext passwords — one per line.
+
+    These are passwords obtained outside the cracking effort (found on a network
+    share, in a script, in documentation) rather than recovered from a hash, so
+    they arrive as bare plaintext with no hash to key off. Blank lines and
+    ``#`` comments are skipped; every other line is taken verbatim — trailing
+    spaces are legitimate password characters, so only the line ending is
+    stripped. Duplicates are collapsed, first occurrence wins.
+    """
+    out: list[str] = []
+    seen: set = set()
+    for raw in text.splitlines():
+        line = raw.rstrip("\r\n")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line not in seen:
+            seen.add(line)
+            out.append(line)
+    return out
+
+
 def parse_lm_halves(text: str) -> dict:
     """Parse LM half-hash entries from a hashcat -m 3000 pot file.
 

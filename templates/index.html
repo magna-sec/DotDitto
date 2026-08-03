@@ -96,6 +96,10 @@
     .btn.danger:hover { background: var(--red-dim); }
     .btn.sm { padding: 4px 10px; font-size: 12px; }
     .btn:disabled { opacity: .4; cursor: not-allowed; }
+    /* Checkbox rendered as a header button (global toggles) */
+    .btn.check-btn { user-select: none; }
+    .btn.check-btn input { cursor: pointer; width: 13px; height: 13px; accent-color: var(--blue); margin: 0; }
+    .btn.check-btn.on { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
 
     /* ── Header ──────────────────────────────────────────────────────── */
     header {
@@ -136,7 +140,7 @@
     main { max-width: 1480px; margin: 0 auto; padding: 24px; }
 
     /* ── Upload section ──────────────────────────────────────────────── */
-    .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .upload-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .upload-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 8px; padding: 18px;
@@ -167,7 +171,7 @@
 
     /* ── Stats strip ─────────────────────────────────────────────────── */
     .stats-grid {
-      display: grid; grid-template-columns: repeat(6, 1fr);
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 12px; margin-bottom: 20px;
     }
     .stat-card {
@@ -279,6 +283,13 @@
       border: 1px solid rgba(227,179,65,.35); margin-left: 6px;
       vertical-align: middle; white-space: nowrap;
     }
+    /* Same, but every historical hit came from the known-password list */
+    .badge-hist-known {
+      display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 4px;
+      background: var(--blue-dim); color: var(--blue);
+      border: 1px solid var(--blue); margin-left: 6px;
+      vertical-align: middle; white-space: nowrap;
+    }
 
     /* ── History detail modal ────────────────────────────────────────── */
     #hist-modal-overlay {
@@ -357,6 +368,8 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
     }
     .hf-val.cracked { color: var(--green); font-weight: 700; font-size: 13px; }
+    .hf-val.known   { color: var(--blue); font-weight: 700; font-size: 13px;
+                      text-decoration: underline dotted; text-underline-offset: 3px; }
     .hf-val.unknown { color: var(--red); font-style: italic; }
     .hf-copy {
       background: var(--surface3); border: 1px solid var(--border2);
@@ -482,6 +495,20 @@
     .pw-lm-tag {
       font-size: 9px; color: var(--yellow); background: var(--yellow-dim);
       border: 1px solid rgba(227,179,65,.35); padding: 0 5px; border-radius: 3px;
+      margin-left: 6px; vertical-align: middle; letter-spacing: .04em; text-transform: uppercase;
+    }
+
+    /* ── Known passwords ───────────────────────────────────────────────────
+       Plaintexts sourced outside the cracking effort (shares, scripts, docs).
+       Deliberately blue + dotted underline so they never read as a green
+       "we cracked this" at a glance. */
+    .pw-known {
+      color: var(--blue); font-weight: 600;
+      text-decoration: underline dotted; text-underline-offset: 3px;
+    }
+    .pw-known-tag {
+      font-size: 9px; font-weight: 600; color: var(--blue); background: var(--blue-dim);
+      border: 1px solid var(--blue); padding: 0 5px; border-radius: 3px;
       margin-left: 6px; vertical-align: middle; letter-spacing: .04em; text-transform: uppercase;
     }
 
@@ -714,6 +741,8 @@
     .btn.client-chevron.active { background: var(--purple); color: #0d1117; border-color: var(--purple); }
 
     body.client-mode.hide-credentials .pw-cracked,
+    body.client-mode.hide-credentials .pw-known,
+    body.client-mode.hide-credentials .pw-lm,
     body.client-mode.hide-credentials .pw-bar-label,
     body.client-mode.hide-credentials .hash-text,
     body.client-mode.hide-credentials .hash-truncated,
@@ -1050,6 +1079,7 @@
     body[data-theme="classic"] tbody tr:hover .pw-cracked { color: #88ff88 !important; }
     body[data-theme="classic"] tbody tr:hover .pw-none    { color: #ffaaaa !important; }
     body[data-theme="classic"] tbody tr:hover .pw-blank   { color: #ffff88 !important; }
+    body[data-theme="classic"] tbody tr:hover .pw-known   { color: #aaccff !important; }
     body[data-theme="classic"] tbody tr:hover .hash-text  { color: #ccccff !important; }
     body[data-theme="classic"] tbody tr:hover .copy-btn   { color: #cccccc !important; }
     body[data-theme="classic"] .pagination {
@@ -1128,6 +1158,7 @@
     body[data-theme="classic"] .pw-cracked { color: #006400 !important; }
     body[data-theme="classic"] .pw-none    { color: #8b0000 !important; }
     body[data-theme="classic"] .pw-blank   { color: #808000 !important; }
+    body[data-theme="classic"] .pw-known   { color: #000080 !important; }
     body[data-theme="classic"] .hash-text  { color: #404040 !important; }
 
     /* Top passwords chart */
@@ -1597,6 +1628,8 @@
     <span class="dot" id="dot-dump"></span><span id="lbl-dump">No dump loaded</span>
     &nbsp;·&nbsp;
     <span class="dot" id="dot-pot"></span><span id="lbl-pot">No pot loaded</span>
+    &nbsp;·&nbsp;
+    <span class="dot" id="dot-known"></span><span id="lbl-known">No known passwords</span>
   </div>
 
   <div class="header-actions">
@@ -1617,6 +1650,11 @@
         </label>
       </div>
     </div>
+    <label class="btn sm check-btn" id="btn-include-machines"
+           title="Include machine accounts ($) in every stat, chart, analysis, export and table. Off by default — machine passwords are random and never crack, so they bury the crack rate.">
+      <input type="checkbox" id="chk-include-machines" onchange="includeMachinesChanged(this.checked)">
+      Machines
+    </label>
     <div style="position:relative">
       <button class="btn sm" id="btn-tier0" onclick="toggleTier0Panel(event)" title="Manage tier-0 user list">Tier 0 ▾</button>
       <div id="tier0-panel" class="domain-panel hidden" style="min-width:280px">
@@ -1753,6 +1791,27 @@ RETURN n</pre>
       </div>
     </div>
 
+    <!-- Known passwords card -->
+    <div class="upload-card">
+      <div class="upload-card-header">
+        <span class="dot" id="dot-known2"></span>
+        <h3>Known Passwords</h3>
+      </div>
+      <div class="drop-zone" id="known-drop-zone"
+           onclick="document.getElementById('known-file-input').click()"
+           ondragover="onDragOver(event,'known-drop-zone')"
+           ondragleave="onDragLeave('known-drop-zone')"
+           ondrop="onDropKnown(event)">
+        <p id="known-drop-text">Drop file(s) here or click to browse</p>
+        <p class="hint" id="known-hint">Plaintext passwords found elsewhere (shares, scripts, docs) — one per line. Matched by NT hash; shown in blue, never counted as cracked.</p>
+      </div>
+      <input type="file" id="known-file-input" multiple>
+      <div class="upload-actions">
+        <button class="btn sm" onclick="openModal('known')">Paste text</button>
+        <button class="btn sm danger" onclick="clearKnown()">Clear Known</button>
+      </div>
+    </div>
+
   </div><!-- /upload-grid -->
 
   <!-- Tab bar (hidden until data is loaded) -->
@@ -1770,7 +1829,7 @@ RETURN n</pre>
     <!-- Stats strip -->
     <div class="stats-grid" id="stats-section">
       <div class="stat-card blue">
-        <div class="label">User Accounts</div>
+        <div class="label" id="stat-users-label">User Accounts</div>
         <div class="value" id="stat-users">0</div>
       </div>
       <div class="stat-card">
@@ -1788,6 +1847,10 @@ RETURN n</pre>
       <div class="stat-card purple">
         <div class="label">Blank / Disabled</div>
         <div class="value" id="stat-blank">0</div>
+      </div>
+      <div class="stat-card blue hidden" id="stat-known-card" title="Passwords recovered outside the cracking effort — excluded from the crack rate">
+        <div class="label">Known</div>
+        <div class="value" id="stat-known">0</div>
       </div>
       <div class="stat-card yellow">
         <div class="label">Crack Rate</div>
@@ -1831,6 +1894,7 @@ RETURN n</pre>
           <option value="cracked">Cracked only</option>
           <option value="uncracked">Uncracked only</option>
           <option value="blank">Blank / Disabled only</option>
+          <option value="known">Known passwords only</option>
         </select>
 
         <select id="filter-added" onchange="filterChanged()" title="Filter to passwords cracked within a recent time window">
@@ -1865,9 +1929,9 @@ RETURN n</pre>
 
         <span class="toolbar-sep"></span>
 
-        <label class="toggle-label">
-          <input type="checkbox" id="chk-machines" onchange="filterChanged()">
-          Show machines
+        <label class="toggle-label" title="Include machine accounts ($) here and in every stat, chart, analysis and export">
+          <input type="checkbox" id="chk-machines" onchange="includeMachinesChanged(this.checked)">
+          Include machines
         </label>
 
         <span class="toolbar-sep"></span>
@@ -1951,9 +2015,9 @@ RETURN n</pre>
 
       <span class="toolbar-sep"></span>
 
-      <label class="toggle-label">
-        <input type="checkbox" id="hash-chk-machines" onchange="hashFilterChanged()">
-        Show machines
+      <label class="toggle-label" title="Include machine accounts ($) here and in every stat, chart, analysis and export">
+        <input type="checkbox" id="hash-chk-machines" onchange="includeMachinesChanged(this.checked)">
+        Include machines
       </label>
 
       <span class="toolbar-sep"></span>
@@ -2139,6 +2203,7 @@ RETURN n</pre>
 const state = {
   hasDump: false,
   hasPot:  false,
+  hasKnown: false,
   page:    1,
   perPage: 100,
   totalPages: 1,
@@ -2150,12 +2215,43 @@ const state = {
   cracked:     'all',
   domain:      'all',
   source:      'all',
-  showMachines: false,
   tier0Only:   false,
   addedWithin: '',
   hashType:    'all',
   lastParams: {},
 };
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Machine accounts — one global switch
+   Machine ($) accounts hold random 120-char passwords that never crack, so
+   they're left out of everything by default. This single toggle opts them back
+   into the tables *and* every stat, chart, analysis and export. Persisted so
+   it survives a reload mid-engagement.
+══════════════════════════════════════════════════════════════════════════ */
+let includeMachines = localStorage.getItem('includeMachines') === '1';
+
+function machinesParam() {
+  return includeMachines ? { include_machines: 'true' } : {};
+}
+
+function syncMachineToggles() {
+  ['chk-include-machines', 'chk-machines', 'hash-chk-machines'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = includeMachines;
+  });
+  const btn = document.getElementById('btn-include-machines');
+  if (btn) btn.classList.toggle('on', includeMachines);
+  const lbl = document.getElementById('stat-users-label');
+  if (lbl) lbl.textContent = includeMachines ? 'Accounts (incl. machines)' : 'User Accounts';
+}
+
+function includeMachinesChanged(val) {
+  includeMachines = !!val;
+  localStorage.setItem('includeMachines', includeMachines ? '1' : '0');
+  syncMachineToggles();
+  hashState.page = 1;
+  refresh(true);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    API helper
@@ -2206,11 +2302,13 @@ function openModal(mode) {
     dump:  'Paste secretsdump output',
     pot:   'Paste hashcat pot file contents',
     tier0: 'Paste tier-0 user list',
+    known: 'Paste known passwords',
   };
   const placeholders = {
     dump:  'DOMAIN\\username:RID:LMHash:NTHash:::\n...',
     pot:   'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...',
     tier0: 'bob@corp.local\nalice@corp.local\nadmin@corp.onmicrosoft.com\n...',
+    known: 'Summer2024!\nWelcome123\nCompanyName1\n...',
   };
   document.getElementById('modal-title').textContent = titles[mode] || 'Paste text';
   document.getElementById('modal-textarea').value = '';
@@ -2273,6 +2371,8 @@ async function submitModal() {
     await loadPasteDump(text, source);
   } else if (_modalMode === 'tier0') {
     await loadPasteTier0(text);
+  } else if (_modalMode === 'known') {
+    await loadPasteKnown(text);
   } else {
     await loadPastePot(text);
   }
@@ -2300,6 +2400,11 @@ function onDropPot(e) {
   e.preventDefault();
   document.getElementById('pot-drop-zone').classList.remove('drag-over');
   if (e.dataTransfer.files.length) loadFilePot(e.dataTransfer.files);
+}
+function onDropKnown(e) {
+  e.preventDefault();
+  document.getElementById('known-drop-zone').classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadFileKnown(e.dataTransfer.files);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2372,6 +2477,56 @@ async function loadPastePot(text) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Upload — known passwords
+   Plaintexts recovered outside the cracking effort. NT-hashed server-side and
+   matched back to accounts, but never counted as cracks.
+══════════════════════════════════════════════════════════════════════════ */
+document.getElementById('known-file-input').addEventListener('change', e => {
+  if (e.target.files.length) loadFileKnown(e.target.files);
+  e.target.value = '';
+});
+
+function _knownToast(res) {
+  state.hasKnown = true;
+  updateHeaderBtns();
+  setKnownStatus(true,`${res.total_known} password${res.total_known === 1 ? '' : 's'}  ·  ${res.matched} account${res.matched === 1 ? '' : 's'} matched`);
+  toast(`Loaded ${res.count} new known password${res.count === 1 ? '' : 's'} — ${res.matched} account${res.matched === 1 ? '' : 's'} matched`, 'success');
+}
+
+async function loadFileKnown(files) {
+  const fd = new FormData();
+  Array.from(files).forEach(f => fd.append('files', f));
+  try {
+    const res = await api('POST', '/api/upload/known', fd);
+    _knownToast(res);
+    if (state.hasDump) await refresh(true);
+  } catch (err) {
+    toast(`Known passwords error: ${err.message}`, 'error', 5000);
+  }
+}
+
+async function loadPasteKnown(text) {
+  try {
+    const res = await api('POST', '/api/paste/known', { text });
+    _knownToast(res);
+    if (state.hasDump) await refresh(true);
+  } catch (err) {
+    toast(`Known passwords error: ${err.message}`, 'error', 5000);
+  }
+}
+
+async function clearKnown() {
+  try {
+    await api('POST', '/api/clear/known');
+    setKnownStatus(false, '');
+    state.hasKnown = false;
+    updateHeaderBtns();
+    if (state.hasDump) await refresh(true);
+    toast('Known passwords cleared', 'info');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Clear
 ══════════════════════════════════════════════════════════════════════════ */
 async function clearDump() {
@@ -2380,7 +2535,8 @@ async function clearDump() {
     await api('POST', '/api/clear');
     setDumpStatus(false, '');
     setPotStatus(false, '');
-    state.hasDump = false; state.hasPot = false;
+    setKnownStatus(false, '');
+    state.hasDump = false; state.hasPot = false; state.hasKnown = false;
     hideDataUI();
     toast('Cleared', 'info');
     updateHeaderBtns();
@@ -2399,12 +2555,13 @@ async function clearPot() {
 }
 
 async function clearAll() {
-  if (!confirm('Clear all data (dump + pot)?')) return;
+  if (!confirm('Clear all data (dump + pot + known passwords)?')) return;
   try {
     await api('POST', '/api/clear');
     setDumpStatus(false, '');
     setPotStatus(false, '');
-    state.hasDump = false; state.hasPot = false;
+    setKnownStatus(false, '');
+    state.hasDump = false; state.hasPot = false; state.hasKnown = false;
     hideDataUI();
     toast('All data cleared', 'info');
     updateHeaderBtns();
@@ -2437,12 +2594,14 @@ function exportCSV() {
 }
 
 function exportWordlist() {
-  window.location.href = '/api/export/wordlist';
+  const p = new URLSearchParams(machinesParam());
+  window.location.href = `/api/export/wordlist${p.toString() ? '?' + p : ''}`;
   toast('Downloading wordlist…', 'info', 2000);
 }
 
 function exportWordWordlist() {
-  window.location.href = '/api/export/wordlist/words';
+  const p = new URLSearchParams(machinesParam());
+  window.location.href = `/api/export/wordlist/words${p.toString() ? '?' + p : ''}`;
   toast('Downloading word-token list…', 'info', 2000);
 }
 
@@ -2455,7 +2614,7 @@ function closeReuseReportModal(e) {
 }
 function doExportReuseReport(showPasswords) {
   document.getElementById('reuse-report-modal-overlay').classList.add('hidden');
-  const p = new URLSearchParams(excludeParam());
+  const p = new URLSearchParams({ ...excludeParam(), ...machinesParam() });
   if (showPasswords) p.set('show_passwords', '1');
   window.location.href = `/api/export/reuse-report${p.toString() ? '?' + p : ''}`;
   toast('Downloading reuse report…', 'info', 2000);
@@ -2466,7 +2625,7 @@ function doExportReuseReport(showPasswords) {
 ══════════════════════════════════════════════════════════════════════════ */
 async function copyUncracked() {
   try {
-    const qs = new URLSearchParams(excludeParam());
+    const qs = new URLSearchParams({ ...excludeParam(), ...machinesParam() });
     const res = await api('GET', `/api/uncracked-hashes${qs.toString() ? '?' + qs : ''}`);
     if (res.count === 0) { toast('No uncracked hashes', 'info'); return; }
     const text = res.hashes.join('\n');
@@ -2567,7 +2726,6 @@ function filterChanged() {
   state.cracked      = document.getElementById('filter-cracked').value;
   state.domain       = document.getElementById('filter-domain').value;
   state.source       = document.getElementById('filter-source').value;
-  state.showMachines = document.getElementById('chk-machines').checked;
   state.tier0Only    = document.getElementById('filter-tier0').value === 'tier0';
   state.addedWithin  = document.getElementById('filter-added').value;
   state.hashType     = document.getElementById('filter-hashtype').value;
@@ -2611,7 +2769,7 @@ let _globalStats = null;
 
 async function loadStats() {
   try {
-    const params = new URLSearchParams({ domain: state.domain, source: state.source, ...excludeParam() });
+    const params = new URLSearchParams({ domain: state.domain, source: state.source, ...excludeParam(), ...machinesParam() });
     const stats = await api('GET', `/api/stats?${params}`);
     state.hasDump = stats.total_users > 0 || stats.machine_accounts > 0;
     _globalStats = stats;
@@ -2632,13 +2790,14 @@ async function loadUsers() {
     domain:       state.domain,
     source:       state.source,
     show_history: true,
-    show_machines: state.showMachines,
+    show_machines: includeMachines,
     sort_by:      state.sortCol,
     sort_dir:     state.sortDir,
     tier0_only:   state.tier0Only,
     added_within: state.addedWithin,
     hash_type:    state.hashType,
     ...excludeParam(),
+    ...machinesParam(),
   };
   state.lastParams = params;
   try {
@@ -2649,7 +2808,7 @@ async function loadUsers() {
     renderTable(data.users);
     renderPagination(data);
     renderTopPasswords(data.top_passwords || []);
-    renderFilterCount(data.total, data.cracked_count ?? 0);
+    renderFilterCount(data.total, data.cracked_count ?? 0, data.known_count ?? 0);
     showDataUI();
   } catch (err) {
     console.error('users error', err);
@@ -2663,12 +2822,17 @@ async function initSession() {
       api('GET', '/api/session'),
       api('GET', '/api/tier0'),
     ]);
-    state.hasDump = info.has_dump;
-    state.hasPot  = info.has_pot;
+    state.hasDump  = info.has_dump;
+    state.hasPot   = info.has_pot;
+    state.hasKnown = !!info.has_known;
 
     if (info.has_pot) {
       const src = info.metadata?.pot_sources?.join(', ') || 'saved session';
       setPotStatus(true, `${src}  (${info.pot_count} hashes)`);
+    }
+    if (info.has_known) {
+      const src = info.metadata?.known_sources?.join(', ') || 'saved session';
+      setKnownStatus(true, `${src}  (${info.known_count} passwords)`);
     }
     if (t0.count > 0) {
       setTier0Status(t0.count, `saved session  (${t0.count} users)`);
@@ -2690,6 +2854,10 @@ function renderStats(s) {
   document.getElementById('stat-uncracked').textContent = s.uncracked.toLocaleString();
   document.getElementById('stat-blank').textContent    = (s.blank ?? 0).toLocaleString();
   document.getElementById('stat-rate').textContent     = s.crack_rate + '%';
+  // Known card only earns its space once a known-password list is in play
+  const known = s.known ?? 0;
+  document.getElementById('stat-known').textContent = known.toLocaleString();
+  document.getElementById('stat-known-card').classList.toggle('hidden', known === 0);
 }
 
 function renderTopPasswords(list) {
@@ -2774,8 +2942,8 @@ function analysisFilterChanged() {
 
 async function loadAnalysis() {
   try {
-    const params = new URLSearchParams({ domain: analysisState.domain, source: analysisState.source, ...excludeParam() });
-    const domainParams = new URLSearchParams(excludeParam());
+    const params = new URLSearchParams({ domain: analysisState.domain, source: analysisState.source, ...excludeParam(), ...machinesParam() });
+    const domainParams = new URLSearchParams({ ...excludeParam(), ...machinesParam() });
     const [data, domains] = await Promise.all([
       api('GET', `/api/analysis?${params}`),
       api('GET', `/api/analysis/domains${domainParams.toString() ? '?' + domainParams : ''}`),
@@ -2807,7 +2975,7 @@ function renderDomainSummary(domains) {
 
 async function exportAnalysisReport() {
   try {
-    const domainParams = new URLSearchParams(excludeParam());
+    const domainParams = new URLSearchParams({ ...excludeParam(), ...machinesParam() });
     const domains = await api('GET', `/api/analysis/domains${domainParams.toString() ? '?' + domainParams : ''}`);
     const d = _analysisData;
     if (!d) { toast('No analysis data available', 'error'); return; }
@@ -2891,8 +3059,13 @@ function renderAnalysis(data) {
   const crackRatePart = data.total_scope != null
     ? `  ·  ${data.crack_rate}% crack rate (${data.total.toLocaleString()} / ${data.total_scope.toLocaleString()})`
     : '';
+  // Known passwords are outside the cracking effort, so they're not analysed —
+  // say so rather than let the numbers look like accounts went missing.
+  const knownPart = data.known_count
+    ? `  ·  ${data.known_count.toLocaleString()} known (not analysed)`
+    : '';
   document.getElementById('analysis-meta').textContent =
-    `${data.total.toLocaleString()} cracked passwords${crackRatePart}  ·  ${data.unique_masks.toLocaleString()} unique mask patterns`;
+    `${data.total.toLocaleString()} cracked passwords${crackRatePart}${knownPart}  ·  ${data.unique_masks.toLocaleString()} unique mask patterns`;
 
   document.getElementById('masks-meta').textContent =
     `Top ${data.masks.length} of ${data.unique_masks.toLocaleString()} unique patterns`;
@@ -3077,7 +3250,7 @@ function switchTab(name) {
 const hashState = {
   page: 1, perPage: 100, totalPages: 1, totalRows: 0,
   sortCol: 'username', sortDir: 'asc',
-  search: '', searchField: 'all', domain: 'all', source: 'all', showMachines: false,
+  search: '', searchField: 'all', domain: 'all', source: 'all',
 };
 
 let _hashSearchTimer = null;
@@ -3093,7 +3266,6 @@ document.getElementById('hash-search-input').addEventListener('input', e => {
 function hashFilterChanged() {
   hashState.domain       = document.getElementById('hash-filter-domain').value;
   hashState.source       = document.getElementById('hash-filter-source').value;
-  hashState.showMachines = document.getElementById('hash-chk-machines').checked;
   hashState.page = 1;
   loadHashesTab();
 }
@@ -3127,10 +3299,11 @@ async function loadHashesTab() {
     domain:        hashState.domain,
     source:        hashState.source,
     show_history:  false,
-    show_machines: hashState.showMachines,
+    show_machines: includeMachines,
     sort_by:       hashState.sortCol,
     sort_dir:      hashState.sortDir,
     ...excludeParam(),
+    ...machinesParam(),
   };
   try {
     const qs = new URLSearchParams(params);
@@ -3253,13 +3426,19 @@ function renderTable(users) {
         ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
       const viaLm = u.lm_confirmed
         ? '<span class="pw-lm-tag" title="Confirmed via LM — the recovered uppercase plaintext matched this account\'s NT hash">via LM</span>' : '';
-      pwHtml = `<span class="pw-cracked">${esc(_pw)}</span>${shared}${viaLm} `
+      // Known passwords never took a crack — blue + "known" tag, not green.
+      const pwCls = u.is_known ? 'pw-known' : 'pw-cracked';
+      const knownTag = u.is_known
+        ? '<span class="pw-known-tag" title="Not cracked — this plaintext came from the known-password list and matches this account\'s NT hash. Excluded from the crack rate.">known</span>' : '';
+      pwHtml = `<span class="${pwCls}">${esc(_pw)}</span>${knownTag}${shared}${viaLm} `
              + `<button class="copy-btn" onclick="event.stopPropagation();copyPw(${i})">copy</button>`;
       pwLenCell = `<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${_pw.length}</td>`;
     } else {
-      const warn = histCracked.length > 0
-        ? `<span class="badge-hist-warn" title="A previous password was cracked — click to view">hist cracked</span>`
-        : '';
+      const warn = histCracked.length === 0
+        ? ''
+        : histCracked.every(h => h.is_known)
+        ? `<span class="badge-hist-known" title="A previous password is in the known-password list — click to view">hist known</span>`
+        : `<span class="badge-hist-warn" title="A previous password was cracked — click to view">hist cracked</span>`;
       // NT uncracked, but LM may be recovered (uppercase, case-unconfirmed —
       // deliberately NOT counted as cracked).
       let lmChip = '';
@@ -3367,7 +3546,8 @@ function openHistoryModal(idx) {
           ${u.is_blank
             ? `<span class="hf-val cracked pw-blank">Blank/Disabled</span>`
             : curCracked
-            ? `<span class="hf-val cracked">${esc(decodePw(u.password))}</span>
+            ? `<span class="hf-val ${u.is_known ? 'known' : 'cracked'}">${esc(decodePw(u.password))}</span>
+               ${u.is_known ? '<span class="pw-known-tag" title="From the known-password list — not cracked">known</span>' : ''}
                <button class="hf-copy" onclick="copyHistPw(0)">copy</button>`
             : `<span class="hf-val unknown">not cracked</span>`
           }
@@ -3408,7 +3588,8 @@ function openHistoryModal(idx) {
               ${h.is_blank
                 ? `<span class="hf-val cracked pw-blank">Blank/Disabled</span>`
                 : cracked
-                ? `<span class="hf-val cracked">${esc(decodePw(h.password))}</span>
+                ? `<span class="hf-val ${h.is_known ? 'known' : 'cracked'}">${esc(decodePw(h.password))}</span>
+                   ${h.is_known ? '<span class="pw-known-tag" title="From the known-password list — not cracked">known</span>' : ''}
                    <button class="hf-copy" onclick="copyHistPw(${pos + 1})">copy</button>`
                 : `<span class="hf-val unknown">not cracked</span>`
               }
@@ -3445,7 +3626,7 @@ function renderPagination(data) {
   document.getElementById('page-label').textContent = `Page ${data.page} / ${data.pages}`;
 }
 
-function renderFilterCount(total, crackedCount) {
+function renderFilterCount(total, crackedCount, knownCount = 0) {
   const el = document.getElementById('filter-result-count');
   if (!el) return;
   if (total === 0) { el.textContent = 'No matching users'; return; }
@@ -3453,7 +3634,8 @@ function renderFilterCount(total, crackedCount) {
   const crackedPart = crackedCount > 0
     ? `  ·  ${crackedCount.toLocaleString()} cracked (${rate}%)`
     : '';
-  el.textContent = `${total.toLocaleString()} user${total === 1 ? '' : 's'}${crackedPart}`;
+  const knownPart = knownCount > 0 ? `  ·  ${knownCount.toLocaleString()} known` : '';
+  el.textContent = `${total.toLocaleString()} user${total === 1 ? '' : 's'}${crackedPart}${knownPart}`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -3514,13 +3696,33 @@ function setPotStatus(on, label) {
   }
 }
 
+function setKnownStatus(on, label) {
+  ['dot-known','dot-known2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('on', on);
+  });
+  document.getElementById('lbl-known').textContent = on ? `Known: ${label}` : 'No known passwords';
+  const zone = document.getElementById('known-drop-zone');
+  const hint = document.getElementById('known-hint');
+  if (on) {
+    zone.classList.add('loaded');
+    document.getElementById('known-drop-text').innerHTML = '<span class="loaded-text">✓ Loaded — drop more files to merge</span>';
+    if (hint) hint.style.display = 'none';
+  } else {
+    zone.classList.remove('loaded');
+    document.getElementById('known-drop-text').textContent = 'Drop file(s) here or click to browse';
+    if (hint) hint.style.display = '';
+  }
+}
+
 function updateHeaderBtns() {
   const hasDump = state.hasDump;
   const hasPot  = state.hasPot;
   document.getElementById('btn-export-json').disabled = !hasDump;
   document.getElementById('btn-clear').disabled       = !hasDump;
   const wlBtn = document.getElementById('btn-wordlist');
-  if (wlBtn) wlBtn.disabled = !(hasDump && hasPot);
+  // Known passwords are exportable plaintexts too, so they enable the wordlist
+  if (wlBtn) wlBtn.disabled = !(hasDump && (hasPot || state.hasKnown));
   const dmgrBtn = document.getElementById('btn-domain-mgr');
   if (dmgrBtn) dmgrBtn.disabled = !hasDump;
 }
@@ -3779,7 +3981,7 @@ async function renderDomainComparison() {
   try {
     const results = await Promise.all(selected.map(async d => {
       if (!compareState.cache[d]) {
-        const params = new URLSearchParams({ domain: d });
+        const params = new URLSearchParams({ domain: d, ...machinesParam() });
         compareState.cache[d] = await api('GET', `/api/stats?${params}`);
       }
       return { domain: d, s: compareState.cache[d] };
@@ -3791,7 +3993,8 @@ async function renderDomainComparison() {
       cracked:          acc.cracked          + s.cracked,
       uncracked:        acc.uncracked        + s.uncracked,
       blank:            acc.blank            + (s.blank ?? 0),
-    }), { total_users: 0, machine_accounts: 0, cracked: 0, uncracked: 0, blank: 0 });
+      known:            acc.known            + (s.known ?? 0),
+    }), { total_users: 0, machine_accounts: 0, cracked: 0, uncracked: 0, blank: 0, known: 0 });
     agg.crack_rate = agg.total_users > 0
       ? Math.round(agg.cracked / agg.total_users * 1000) / 10
       : 0;
@@ -4083,6 +4286,7 @@ if (_savedBrightness !== 100) {
 { const sl = document.getElementById('brightness-slider'); if (sl) sl.value = _savedBrightness; }
 { const bv = document.getElementById('brightness-val'); if (bv) bv.textContent = _savedBrightness + '%'; }
 
+syncMachineToggles();
 initSession();
 applyClientMode();
 </script>

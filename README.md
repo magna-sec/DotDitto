@@ -9,6 +9,8 @@
 
 - **NTDS dump ingestion** — file upload or paste; supports secretsdump `-history` output; each dump can be tagged with a source label (DC hostname) for deduplication and filtering
 - **Hashcat pot file support** — load one or more pot files (`HASH:plain` or `$NT$HASH:plain`)
+- **Known passwords** — load plaintexts recovered *outside* the cracking effort (network shares, scripts, documentation); matched to accounts by NT hash and shown in blue with a `known` badge so they never read as a crack. Excluded from the crack rate everywhere
+- **Machine accounts toggle** — one tick box in the header includes machine (`$`) accounts in every stat, chart, analysis, export and table; off by default
 - **Multi-domain sessions** — load dumps from multiple domains simultaneously; filter by domain across all views
 - **Domain visibility management** — show/hide individual domains from all stats and charts
 - **Domain comparison** — side-by-side crack rate and account stats across any combination of domains
@@ -103,6 +105,60 @@ Supported pot formats:
 $NT$8846f7eaee8fb117ad06bdd830b7586c:Password1
 ```
 
+### Known passwords
+
+Passwords you already have but never cracked — found in a script on a share, in
+a password-manager export, in handover documentation. Drop the file onto the
+**Known Passwords** zone (or paste it); multiple files are merged.
+
+One plaintext per line. Blank lines and `#` comments are ignored; everything
+else is taken verbatim, including trailing spaces:
+
+```
+# \\fs01\it$\build\unattend-notes.txt
+Summer2024!
+Welcome123
+CompanyName1
+```
+
+Each entry is NT-hashed locally and matched against the dump, so a hit is
+*proof* that account uses that password — but it was never cracked. Matching
+accounts show the plaintext in **blue with a `known` badge** instead of the
+green cracked styling, and:
+
+- they are **excluded from the crack rate**, the Cracked count, the top-password
+  chart, and all Analysis-tab composition stats (a separate **Known** stat card
+  and a `known` count appear once any are matched)
+- they are **included** in the wordlist export — they're valid plaintexts for
+  this environment
+- their hashes are **not** in the uncracked-hash export (the password is known,
+  so there's nothing left to crack)
+- `Cracked only` / `Known passwords only` in the toolbar filter scopes the table
+  to either group; CSV export gains a **Password Origin** column
+  (`Cracked` / `Known` / `Blank/Disabled`)
+
+Use **Clear Known** to drop the list; affected accounts revert to uncracked.
+
+---
+
+## Machine Accounts
+
+Machine (`$`) accounts hold random 120-character passwords that never crack, so
+they're left out of everything by default. The **Machines** tick box in the
+header opts them back into *all* analysis at once:
+
+| Included when ticked |
+|---|
+| Stats strip, crack rate, and domain comparison |
+| Analysis tab (masks, lengths, char classes, per-domain summary) |
+| Overview and All Hashes tables |
+| Wordlist / word-token / reuse-report exports and **Copy Uncracked Hashes** |
+
+The two **Include machines** boxes in the table toolbars are the same switch —
+tick any one and they all follow. The setting is saved to `localStorage`, and
+the **User Accounts** stat card relabels itself to **Accounts (incl. machines)**
+so a screenshot is never ambiguous about which population a rate refers to.
+
 ---
 
 ## Multi-Domain Support
@@ -195,10 +251,10 @@ Use the **Brightness** slider in the same panel to fine-tune display brightness 
 
 | Action | Description |
 |--------|-------------|
-| **Export Wordlist** | All unique cracked passwords, one per line (`.txt`) |
+| **Export Wordlist** | All unique recovered passwords — cracked *and* known — one per line (`.txt`) |
 | **Export Word Tokens** | Most-common word tokens extracted from cracked passwords (`.txt`) |
-| **Export CSV** | Current filtered table as a flat CSV |
-| **Export JSON** | Full session snapshot (dump + pot hashes + notes), re-importable via **Import JSON** |
+| **Export CSV** | Current filtered table as a flat CSV (includes a **Password Origin** column) |
+| **Export JSON** | Full session snapshot (dump + pot hashes + known passwords + notes), re-importable via **Import JSON** |
 | **Export .hcmask** | Top mask patterns ready for `hashcat -a 3` |
 | **Copy Uncracked Hashes** | Unique uncracked NT hashes to clipboard |
 

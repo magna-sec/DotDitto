@@ -35,10 +35,12 @@ session: dict = {
         "updated": None,
         "dump_sources": [],
         "pot_sources": [],
+        "known_sources": [],
     },
     "users": [],
     "pot_hashes": {},
     "pot_added": {},      # nt_hash -> ISO timestamp when first added to the pot
+    "known_passwords": {},# nt_hash -> plaintext known from outside the crack effort
     "lm_halves": {},      # 16-hex LM half -> uppercase plaintext half (hashcat -m 3000)
     "tier0_users": [],    # list of lowercase "user@domain" strings
     "user_comments": {},  # keyed by "domain/username" (lowercase)
@@ -128,7 +130,9 @@ def load_session_file() -> None:
             session.setdefault("tier0_users", [])
             session.setdefault("user_comments", {})
             session.setdefault("pot_added", {})
+            session.setdefault("known_passwords", {})
             session.setdefault("lm_halves", {})
+            session.setdefault("metadata", {}).setdefault("known_sources", [])
             for u in session["users"]:
                 u.setdefault("aes256", None)
                 u.setdefault("aes128", None)
@@ -152,10 +156,12 @@ def clear_session() -> None:
                 "updated": None,
                 "dump_sources": [],
                 "pot_sources": [],
+                "known_sources": [],
             },
             "users": [],
             "pot_hashes": {},
             "pot_added": {},
+            "known_passwords": {},
             "lm_halves": {},
             "tier0_users": [],
             "user_comments": {},
@@ -170,13 +176,16 @@ def replace_session(data: dict) -> None:
     session.update(data)
     session.setdefault("pot_hashes", {})
     session.setdefault("pot_added", {})
+    session.setdefault("known_passwords", {})
     session.setdefault("lm_halves", {})
     session.setdefault("tier0_users", [])
     session.setdefault("user_comments", {})
     session.setdefault(
         "metadata",
-        {"created": None, "updated": None, "dump_sources": [], "pot_sources": []},
+        {"created": None, "updated": None, "dump_sources": [], "pot_sources": [],
+         "known_sources": []},
     )
+    session["metadata"].setdefault("known_sources", [])
     # Ensure Kerberos and source fields exist on user objects from older sessions
     for u in session.get("users", []):
         u.setdefault("aes256", None)
@@ -215,6 +224,23 @@ def _has_lm(user: dict) -> bool:
     )
 
 
+def add_known_passwords(passwords: list) -> int:
+    """Merge a list of known plaintexts into the session, keyed by NT hash.
+
+    A known-password list is bare plaintext with no hash attached, so each entry
+    is NT-hashed here — that hash is what links it back to an account in the
+    dump. Returns how many entries weren't already in the known set.
+    """
+    known = session.setdefault("known_passwords", {})
+    new = 0
+    for pw in passwords:
+        h = nt_hash(pw)
+        if h not in known:
+            new += 1
+        known[h] = pw
+    return new
+
+
 def apply_passwords() -> None:
     """Match cracked hashes from pot_hashes back to users and compute sharing counts.
 
@@ -228,6 +254,7 @@ def apply_passwords() -> None:
     ph = session["pot_hashes"]
     pot_added = session.get("pot_added", {})
     lm_halves = session.get("lm_halves", {})
+    known     = session.get("known_passwords", {})
 
     for user in session["users"]:
         is_blank = user["nt_hash"] == BLANK_NT_HASH
@@ -269,6 +296,18 @@ def apply_passwords() -> None:
                 if nt_hash(user["lm_password"]) == user["nt_hash"]:
                     user["password"] = user["lm_password"]
                     user["lm_confirmed"] = True
+
+        # ── Known passwords (recovered outside the cracking effort) ────────
+        # Sourced from network shares, scripts, documentation… They're matched
+        # by NT hash, so the plaintext is proven correct for this account — but
+        # it was never actually cracked, so it's flagged separately and kept
+        # out of the crack rate. A real pot crack always wins over a known one.
+        user["is_known"] = False
+        if user["password"] is None and not is_blank:
+            kp = known.get(user["nt_hash"])
+            if kp is not None:
+                user["password"]  = kp
+                user["is_known"]  = True
 
     # Count how many (non-history) user accounts share each plaintext.
     # Blank passwords (falsy "") are naturally excluded here.
@@ -377,14 +416,19 @@ def get_filtered_users(
         if exclude_domains and u["domain"] in exclude_domains:
             return False
         if check_cracked:
-            # "cracked" = real recovered password (excludes blank/disabled);
-            # "uncracked" = no password at all (blanks have password == "" so
-            # they're excluded here too); "blank" = blank/disabled only.
-            if cracked == "cracked" and (u["password"] is None or u.get("is_blank")):
+            # "cracked" = genuinely cracked password (excludes blank/disabled and
+            # known-from-elsewhere); "uncracked" = no password at all (blanks have
+            # password == "" so they're excluded here too); "blank" = blank/disabled
+            # only; "known" = plaintext came from the known-password list.
+            if cracked == "cracked" and (
+                u["password"] is None or u.get("is_blank") or u.get("is_known")
+            ):
                 return False
             if cracked == "uncracked" and u["password"] is not None:
                 return False
             if cracked == "blank" and not u.get("is_blank"):
+                return False
+            if cracked == "known" and not u.get("is_known"):
                 return False
         if added_cutoff is not None:
             ca = u.get("cracked_at")

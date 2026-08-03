@@ -11,9 +11,15 @@ from datetime import datetime
 from flask import Blueprint, Response, jsonify, request
 
 from analysis import build_word_wordlist, run_analysis
-from parsers import parse_lm_halves, parse_pot_file, parse_secretsdump
+from parsers import (
+    parse_known_passwords,
+    parse_lm_halves,
+    parse_pot_file,
+    parse_secretsdump,
+)
 from session_store import (
     BLANK_NT_HASH,
+    add_known_passwords,
     apply_passwords,
     clear_session,
     get_filtered_users,
@@ -37,6 +43,16 @@ def _parse_added_within(raw: str) -> float | None:
     except ValueError:
         return None
     return hours if hours > 0 else None
+
+
+def _include_machines() -> bool:
+    """The global 'include machine accounts' toggle, sent by every analysis call.
+
+    Machine accounts have random 120-char passwords that never crack, so they're
+    excluded from stats, analysis and exports by default — including them would
+    bury the crack rate. The toggle lets an operator opt them back in.
+    """
+    return request.args.get("include_machines", "false") == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +200,83 @@ def paste_pot():
 
 
 # ---------------------------------------------------------------------------
+# Ingestion — known passwords
+#
+# Plaintexts recovered outside the cracking effort (network shares, scripts,
+# documentation). Each is NT-hashed on the way in so it can be matched back to
+# accounts in the dump — proven correct, but never actually cracked.
+# ---------------------------------------------------------------------------
+
+def _known_matched() -> int:
+    """How many (non-history) accounts currently hold a known password."""
+    return sum(1 for u in session["users"] if u.get("is_known") and not u["is_history"])
+
+
+@bp.route("/api/upload/known", methods=["POST"])
+def upload_known():
+    files = request.files.getlist("files")
+    if not files or not files[0].filename:
+        return jsonify({"error": "No files provided"}), 400
+
+    total_new = 0
+    total_read = 0
+    names = []
+    for f in files:
+        text = f.read().decode("utf-8", errors="replace")
+        pws = parse_known_passwords(text)
+        total_read += len(pws)
+        total_new += add_known_passwords(pws)
+        names.append(f.filename)
+
+    if total_read == 0:
+        return jsonify({"error": "No passwords found in file"}), 400
+
+    session["metadata"]["known_sources"] = (
+        session["metadata"].get("known_sources", []) + names
+    )
+    apply_passwords()
+    save_session()
+    return jsonify(
+        {"success": True, "count": total_new, "read": total_read,
+         "total_known": len(session["known_passwords"]),
+         "matched": _known_matched(), "filenames": names}
+    )
+
+
+@bp.route("/api/paste/known", methods=["POST"])
+def paste_known():
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    if not text.strip():
+        return jsonify({"error": "No text provided"}), 400
+
+    pws = parse_known_passwords(text)
+    if not pws:
+        return jsonify({"error": "No passwords found"}), 400
+
+    new = add_known_passwords(pws)
+    session["metadata"]["known_sources"] = (
+        session["metadata"].get("known_sources", []) + ["pasted text"]
+    )
+    apply_passwords()
+    save_session()
+    return jsonify(
+        {"success": True, "count": new, "read": len(pws),
+         "total_known": len(session["known_passwords"]),
+         "matched": _known_matched()}
+    )
+
+
+@bp.route("/api/clear/known", methods=["POST"])
+def clear_known():
+    session["known_passwords"] = {}
+    session["metadata"]["known_sources"] = []
+    apply_passwords()  # drop the is_known flag / password from affected accounts
+    save_session()
+    return jsonify({"success": True})
+
+
+# ---------------------------------------------------------------------------
 # Data retrieval
 # ---------------------------------------------------------------------------
 
@@ -194,6 +287,8 @@ def get_session_info():
         {
             "has_dump":      len(users) > 0,
             "has_pot":       len(session["pot_hashes"]) > 0,
+            "has_known":     len(session.get("known_passwords", {})) > 0,
+            "known_count":   len(session.get("known_passwords", {})),
             "user_count":    len([u for u in users if not u["is_history"] and not u["is_machine"]]),
             "machine_count": len([u for u in users if not u["is_history"] and u["is_machine"]]),
             "history_count": len([u for u in users if u["is_history"]]),
@@ -236,11 +331,17 @@ def get_users():
     pw_freq: dict[str, int] = {}
     cracked_count = 0
     blank_count   = 0
+    known_count   = 0
+    inc_mach      = _include_machines()
     for u in users:
-        if u.get("is_history") or u.get("is_machine"):
+        if u.get("is_history"):
+            continue
+        if u.get("is_machine") and not inc_mach:
             continue
         if u.get("is_blank"):
             blank_count += 1
+        elif u.get("is_known"):
+            known_count += 1
         elif u.get("password") is not None:
             cracked_count += 1
             pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
@@ -255,6 +356,7 @@ def get_users():
             "pages":         pages,
             "cracked_count": cracked_count,
             "blank_count":   blank_count,
+            "known_count":   known_count,
             "top_passwords": [{"password": p, "count": c} for p, c in top_pw],
         }
     )
@@ -283,14 +385,23 @@ def get_stats():
     # krbtgt never cracks and isn't a real crack target — keep it out of the
     # user-account population that drives the crack rate.
     krbtgt     = [u for u in scoped if u.get("is_krbtgt")]
-    user_accts = [u for u in scoped if not u["is_machine"] and not u.get("is_krbtgt")]
+    inc_mach   = _include_machines()
+    user_accts = [
+        u for u in scoped
+        if not u.get("is_krbtgt") and (inc_mach or not u["is_machine"])
+    ]
     machines   = [u for u in scoped if u["is_machine"]]
     # History count is always global (not filtered)
     hist_entries = [u for u in all_u if u["is_history"]]
-    # "cracked" means a real recovered password. Blank/disabled accounts are
-    # counted separately so they don't inflate the crack rate.
+    # "cracked" means a genuinely cracked password. Blank/disabled accounts and
+    # known-from-elsewhere passwords are counted separately so they don't
+    # inflate the crack rate.
     blank      = [u for u in user_accts if u.get("is_blank")]
-    cracked    = [u for u in user_accts if u["password"] is not None and not u.get("is_blank")]
+    known      = [u for u in user_accts if u.get("is_known")]
+    cracked    = [
+        u for u in user_accts
+        if u["password"] is not None and not u.get("is_blank") and not u.get("is_known")
+    ]
 
     pw_freq: dict[str, int] = {}
     for u in cracked:
@@ -312,8 +423,9 @@ def get_stats():
             "machine_accounts": len(machines),
             "history_entries":  len(hist_entries),
             "cracked":          len(cracked),
-            "uncracked":        len(user_accts) - len(cracked) - len(blank),
+            "uncracked":        len(user_accts) - len(cracked) - len(blank) - len(known),
             "blank":            len(blank),
+            "known":            len(known),
             "krbtgt":           len(krbtgt),
             "crack_rate":       rate,
             "top_passwords":    [{"password": p, "count": c} for p, c in top_pw],
@@ -332,9 +444,12 @@ def get_analysis():
     exclude_raw = request.args.get("exclude_domains", "")
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
 
+    inc_mach = _include_machines()
+
     scope_users = [
         u for u in session["users"]
-        if not u["is_history"] and not u["is_machine"] and not u.get("is_krbtgt")
+        if not u["is_history"] and not u.get("is_krbtgt")
+        and (inc_mach or not u["is_machine"])
         and (domain == "all" or u["domain"] == domain)
         and (source == "all" or u.get("dump_source", "") == source)
         and (not excluded or u["domain"] not in excluded)
@@ -342,8 +457,11 @@ def get_analysis():
     # Blank/disabled accounts (password == "") are excluded from both the crack
     # rate and composition analysis — they aren't a cracking win, and an empty
     # plaintext has no mask, length, or character-class pattern to aggregate.
-    cracked_pws   = [u["password"] for u in scope_users if u["password"]]
+    # Known passwords are excluded too: they were never cracked, so counting
+    # them would overstate what the cracking effort actually achieved.
+    cracked_pws   = [u["password"] for u in scope_users if u["password"] and not u.get("is_known")]
     blank_count   = sum(1 for u in scope_users if u.get("is_blank"))
+    known_count   = sum(1 for u in scope_users if u.get("is_known"))
     total_scope   = len(scope_users)
     crack_rate    = round(len(cracked_pws) / total_scope * 100, 1) if total_scope else 0.0
 
@@ -351,13 +469,16 @@ def get_analysis():
     result["crack_rate"]    = crack_rate
     result["total_scope"]   = total_scope
     result["blank_count"]   = blank_count
+    result["known_count"]   = known_count
     result["cracked_count"] = len(cracked_pws)
     return jsonify(result)
 
 
 @bp.route("/api/uncracked-hashes")
 def uncracked_hashes():
-    include_machines = request.args.get("machines", "false") == "true"
+    include_machines = (
+        request.args.get("machines", "false") == "true" or _include_machines()
+    )
     exclude_raw = request.args.get("exclude_domains", "")
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     seen:   set  = set()
@@ -425,10 +546,13 @@ def import_json():
 def get_domain_analysis():
     exclude_raw = request.args.get("exclude_domains", "")
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+    inc_mach = _include_machines()
     users = session.get("users", [])
     domains = {}
     for u in users:
-        if u["is_history"] or u["is_machine"] or u.get("is_krbtgt"):
+        if u["is_history"] or u.get("is_krbtgt"):
+            continue
+        if u["is_machine"] and not inc_mach:
             continue
         if excluded and u["domain"] in excluded:
             continue
@@ -436,7 +560,10 @@ def get_domain_analysis():
         if d not in domains:
             domains[d] = {"total": 0, "cracked": 0}
         domains[d]["total"] += 1
-        if u["password"] is not None:
+        # Same definition of "cracked" as /api/stats: a real recovered password.
+        # Blank/disabled accounts and known-from-elsewhere passwords are not
+        # cracks, so this rate matches the one on the Overview tab.
+        if u["password"] is not None and not u.get("is_blank") and not u.get("is_known"):
             domains[d]["cracked"] += 1
     result = []
     for domain, stats in sorted(domains.items()):
@@ -471,13 +598,23 @@ def export_csv():
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
-                "Blank/Disabled", "LM Password", "Cracked At", "Shared Count", "Machine", "History", "Hist Index", "Source"])
+                "Password Origin", "Blank/Disabled", "LM Password", "Cracked At",
+                "Shared Count", "Machine", "History", "Hist Index", "Source"])
     for u in users:
+        if u.get("is_blank"):
+            origin = "Blank/Disabled"
+        elif u.get("is_known"):
+            origin = "Known"
+        elif u["password"] is not None:
+            origin = "Cracked"
+        else:
+            origin = ""
         w.writerow(
             [
                 u["username"], u["domain"], u["rid"],
                 u["lm_hash"], u["nt_hash"],
                 "(blank)" if u.get("is_blank") else (u["password"] or ""),
+                origin,
                 "Yes" if u.get("is_blank") else "No",
                 u.get("lm_password") or "",
                 u.get("cracked_at") or "",
@@ -502,9 +639,11 @@ def export_reuse_report():
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     show_passwords = request.args.get("show_passwords", "0") == "1"
 
+    inc_mach = _include_machines()
+
     users = [
         u for u in session["users"]
-        if not u["is_history"] and not u["is_machine"]
+        if not u["is_history"] and (inc_mach or not u["is_machine"])
         and (not excluded or u["domain"] not in excluded)
     ]
 
@@ -528,7 +667,9 @@ def export_reuse_report():
             if len(passwords) == 1:
                 pw = next(iter(passwords))
                 pw_part = f": {pw}" if show_passwords else ""
-                header = f"Password reused {user_count} times — {short_hash} (Cracked{pw_part})"
+                # Same NT hash ⇒ same plaintext source, so one flag covers the group
+                origin = "Known" if any(u.get("is_known") for u in group) else "Cracked"
+                header = f"Password reused {user_count} times — {short_hash} ({origin}{pw_part})"
             elif passwords:
                 header = f"Password reused {user_count} times — {short_hash} (Multiple passwords)"
             else:
@@ -549,11 +690,21 @@ def export_reuse_report():
 
 @bp.route("/api/export/wordlist")
 def export_wordlist():
-    """Export all unique cracked passwords as a plain-text wordlist."""
+    """Export all unique recovered passwords as a plain-text wordlist.
+
+    Known passwords are included here — they're valid plaintexts from this
+    environment and are exactly what you want in a targeted wordlist, even
+    though they don't count towards the crack rate.
+    """
+    inc_mach = _include_machines()
+
+    def in_scope(u: dict) -> bool:
+        return bool(u["password"]) and not u["is_history"] and (inc_mach or not u["is_machine"])
+
     seen: set   = set()
     words: list = []
     for u in session["users"]:
-        if u["password"] and not u["is_history"] and not u["is_machine"]:
+        if in_scope(u):
             pw = u["password"]
             if pw not in seen:
                 seen.add(pw)
@@ -561,7 +712,7 @@ def export_wordlist():
     # Sort by frequency (most common first) using pot_hashes reverse lookup
     pw_freq: dict[str, int] = {}
     for u in session["users"]:
-        if u["password"] and not u["is_history"] and not u["is_machine"]:
+        if in_scope(u):
             pw_freq[u["password"]] = pw_freq.get(u["password"], 0) + 1
     words.sort(key=lambda p: pw_freq.get(p, 0), reverse=True)
 
@@ -577,10 +728,11 @@ def export_wordlist():
 def export_word_wordlist():
     """Export a wordlist of most-used word tokens extracted from cracked passwords."""
     min_count = max(1, int(request.args.get("min_count", 2)))
+    inc_mach  = _include_machines()
     cracked_pws = [
         u["password"]
         for u in session["users"]
-        if u["password"] and not u["is_history"] and not u["is_machine"]
+        if u["password"] and not u["is_history"] and (inc_mach or not u["is_machine"])
     ]
     words = build_word_wordlist(cracked_pws, min_count=min_count)
     content = "\n".join(words)
