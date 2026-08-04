@@ -292,12 +292,14 @@
     }
 
     /* ── History detail modal ────────────────────────────────────────── */
-    #hist-modal-overlay {
+    #hist-modal-overlay,
+    #share-modal-overlay {
       position: fixed; inset: 0; z-index: 2000;
       background: rgba(0,0,0,.7);
       display: flex; align-items: center; justify-content: center;
     }
-    #hist-modal-overlay.hidden { display: none; }
+    #hist-modal-overlay.hidden,
+    #share-modal-overlay.hidden { display: none; }
 
     .hist-modal {
       background: var(--surface); border: 1px solid var(--border2);
@@ -511,6 +513,40 @@
       border: 1px solid var(--blue); padding: 0 5px; border-radius: 3px;
       margin-left: 6px; vertical-align: middle; letter-spacing: .04em; text-transform: uppercase;
     }
+
+    /* ── Shared-password badge (identical NT hash ⇒ identical password) ──
+       Sits next to the hash so it reads even when nothing is cracked. Red when
+       the shared password is still unrecovered — that's the cluster worth
+       pointing hashcat at. */
+    .hash-shared {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 4px; margin-left: 6px;
+      background: var(--yellow-dim); color: var(--yellow);
+      border: 1px solid rgba(227,179,65,.45);
+      cursor: pointer; vertical-align: middle; white-space: nowrap;
+      transition: filter .12s;
+    }
+    .hash-shared:hover { filter: brightness(1.35); }
+    .hash-shared.uncracked { background: var(--red-dim); color: var(--red); border-color: rgba(248,81,73,.45); }
+    body.client-mode .hash-shared { pointer-events: none; }
+
+    /* Shared-password modal */
+    .share-list { display: flex; flex-direction: column; gap: 2px; }
+    .share-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+      border-radius: 5px; font-size: 12px;
+    }
+    .share-row:nth-child(odd) { background: rgba(255,255,255,.025); }
+    .share-row .sr-user { font-family: var(--font-mono); color: var(--text); }
+    .share-row .sr-dom  { font-family: var(--font-mono); color: var(--text-muted); font-size: 11px; }
+    .share-row .sr-rid  { color: var(--text-muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+    .share-summary {
+      display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+      padding: 10px 12px; margin-bottom: 14px; border-radius: 6px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .share-summary .ss-lbl { color: var(--text-muted); margin-right: 6px; }
 
     /* ── Hash-type tags (Overview table) ─────────────────────────────── */
     .htags { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -1594,6 +1630,20 @@
   </div>
 </div>
 
+<!-- ─── Shared-password (same NT hash) modal ─────────────────────────────── -->
+<div id="share-modal-overlay" class="hidden" onclick="closeShareModal(event)">
+  <div class="hist-modal" onclick="event.stopPropagation()">
+    <div class="hist-modal-hdr">
+      <div>
+        <div class="hist-modal-title" id="share-modal-title">Shared password</div>
+        <div class="hist-modal-sub"  id="share-modal-sub"></div>
+      </div>
+      <button class="hist-modal-close" onclick="closeShareModal()" title="Close">✕</button>
+    </div>
+    <div class="hist-modal-body" id="share-modal-body"></div>
+  </div>
+</div>
+
 <!-- ─── Comment edit popover ─────────────────────────────────────────────── -->
 <div id="comment-popover" class="comment-popover hidden">
   <div class="comment-popover-hdr">
@@ -1679,7 +1729,7 @@
           <pre id="bh-query-pre" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 9px;font-size:10px;font-family:var(--font-mono);color:var(--blue);margin:0 0 6px;white-space:pre-wrap;word-break:break-all;line-height:1.5;user-select:all">MATCH (n)
 WHERE (n:User OR n:AZUser)
   AND ((n:Tag_Tier_Zero) OR COALESCE(n.system_tags, '') CONTAINS 'admin_tier_0')
-RETURN n</pre>
+RETURN n.name</pre>
           <button class="btn sm" onclick="copyTier0BHQuery()" style="width:100%;justify-content:center">Copy query</button>
         </div>
       </div>
@@ -2063,9 +2113,42 @@ RETURN n</pre>
   <!-- ─── Tab: Analysis ────────────────────────────────────────────────────── -->
   <div id="tab-analysis" class="tab-panel hidden">
 
+    <!-- Shared passwords (NT hash grouping) — deliberately outside the
+         cracked-password gate below: this works with an empty pot file. -->
+    <div class="analysis-card hidden" id="hash-reuse-card">
+      <div class="analysis-hdr">
+        <div>
+          <h3>Shared Passwords</h3>
+          <div class="analysis-meta" id="hash-reuse-meta"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn sm client-hide" onclick="exportReuseReport()" title="Download shared-hash groups: each reused NT hash with all accounts that share it">Export Reuse Report</button>
+        </div>
+      </div>
+
+      <div class="len-section-lbl">Accounts sharing a password with at least one other account</div>
+      <div class="reuse-row" id="hash-reuse-row"></div>
+
+      <div class="len-section-lbl">Largest shared-password clusters — click a row to list the accounts</div>
+      <div class="masks-wrap">
+        <table class="masks-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>NT hash</th>
+              <th style="text-align:right">Accounts</th>
+              <th>Password</th>
+              <th>Accounts (first 5)</th>
+            </tr>
+          </thead>
+          <tbody id="hash-reuse-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- No-data placeholder -->
     <div id="analysis-empty" class="analysis-card" style="text-align:center;padding:60px 24px;color:var(--text-muted);">
-      No cracked passwords yet — load a hashcat pot file to enable analysis.
+      No cracked passwords yet — load a hashcat pot file for password composition analysis.
     </div>
 
     <!-- ── Stats section (hidden until data) ── -->
@@ -2944,16 +3027,62 @@ async function loadAnalysis() {
   try {
     const params = new URLSearchParams({ domain: analysisState.domain, source: analysisState.source, ...excludeParam(), ...machinesParam() });
     const domainParams = new URLSearchParams({ ...excludeParam(), ...machinesParam() });
-    const [data, domains] = await Promise.all([
+    const [data, domains, reuse] = await Promise.all([
       api('GET', `/api/analysis?${params}`),
       api('GET', `/api/analysis/domains${domainParams.toString() ? '?' + domainParams : ''}`),
+      api('GET', `/api/analysis/hash-reuse${domainParams.toString() ? '?' + domainParams : ''}`),
     ]);
     _analysisData = data;
     renderAnalysis(data);
     renderDomainSummary(domains);
+    renderHashReuse(reuse);
   } catch (err) {
     console.error('analysis error', err);
   }
+}
+
+/* Shared passwords — grouped by NT hash, so it works with an empty pot file. */
+function renderHashReuse(d) {
+  const card = document.getElementById('hash-reuse-card');
+  if (!card) return;
+  if (!d || !d.shared_groups) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+
+  document.getElementById('hash-reuse-meta').textContent =
+    `${d.shared_groups.toLocaleString()} password${d.shared_groups === 1 ? '' : 's'} shared across `
+    + `${d.shared_accounts.toLocaleString()} of ${d.total_accounts.toLocaleString()} accounts with a password set`
+    + `  ·  found by matching NT hashes — no cracking required`;
+
+  document.getElementById('hash-reuse-row').innerHTML = [
+    { cls: 'red',    val: d.shared_pct + '%',                  lbl: 'Accounts sharing a password' },
+    { cls: 'blue',   val: d.shared_groups.toLocaleString(),    lbl: 'Distinct shared passwords' },
+    { cls: 'yellow', val: d.max_group.toLocaleString(),        lbl: 'Largest cluster (accounts)' },
+    { cls: 'red',    val: d.uncracked_accounts.toLocaleString(), lbl: `Accounts on ${d.uncracked_groups} unrecovered shared password${d.uncracked_groups === 1 ? '' : 's'}` },
+  ].map(({ cls, val, lbl }) =>
+    `<div class="reuse-pill ${cls}">
+      <div class="rp-val">${val}</div>
+      <div class="rp-lbl">${lbl}</div>
+    </div>`
+  ).join('');
+
+  document.getElementById('hash-reuse-tbody').innerHTML = (d.groups || []).map((g, i) => {
+    const pw = g.password == null
+      ? '<span class="pw-none">not recovered</span>'
+      : g.is_known
+      ? `<span class="pw-known">${esc(decodePw(g.password))}</span><span class="pw-known-tag">known</span>`
+      : `<span class="pw-cracked">${esc(decodePw(g.password))}</span>`;
+    const flags = (g.has_tier0 ? '<span class="badge-tier0" title="A tier-0 account shares this password">T0</span>' : '')
+                + (g.has_machine ? '<span class="badge badge-machine" style="margin-left:6px">machine</span>' : '');
+    const members = g.members.map(m => `<span class="username-text">${esc(m)}</span>`).join(', ')
+                  + (g.count > g.members.length ? `<span style="color:var(--text-muted)">  +${g.count - g.members.length} more</span>` : '');
+    return `<tr style="cursor:pointer" onclick="openShareModal('${g.hash}')" title="Click to list all ${g.count} accounts">
+      <td style="color:var(--text-muted)">${i + 1}</td>
+      <td><span class="hash-text">${g.hash.slice(0, 12)}…</span></td>
+      <td style="text-align:right"><span class="hash-shared${g.password == null ? ' uncracked' : ''}">×${g.count}</span></td>
+      <td>${pw}${flags}</td>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${members}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderDomainSummary(domains) {
@@ -3333,7 +3462,7 @@ function renderHashesTable(users) {
     return `<tr class="${rowClass}">
       <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
-      <td>${hashCol(u.nt_hash)}</td>
+      <td>${hashCol(u.nt_hash)}${shareBadge(u)}</td>
       <td>${hashCol(u.has_lm ? u.lm_hash : '')}</td>
       <td>${hashCol(u.aes256)}</td>
       <td>${hashCol(u.aes128)}</td>
@@ -3370,9 +3499,24 @@ function renderHashesPagination(data) {
 }
 
 /* ── Hash cell helper ─────────────────────────────────────────────── */
-function hashCell(h) {
-  return `<span class="hash-text">${h}</span> `
+function hashCell(h, shareBadge = '') {
+  return `<span class="hash-text">${h}</span>${shareBadge} `
        + `<button class="copy-btn" onclick="event.stopPropagation();copyText('${h}')">copy</button>`;
+}
+
+/* ── Shared-password badge ────────────────────────────────────────────
+   NT is unsalted, so an identical hash *is* an identical password — this
+   badge works whether or not the password was ever cracked. */
+function shareBadge(u) {
+  const n = u.hash_count || 1;
+  if (n < 2) return '';
+  const unrecovered = u.password == null;
+  const what = u.is_blank ? 'password'
+             : u.password == null ? 'password (not recovered)'
+             : u.is_known ? 'known password' : 'cracked password';
+  return `<span class="hash-shared${unrecovered ? ' uncracked' : ''}"`
+       + ` title="${n} accounts share this ${what} — click to list them"`
+       + ` onclick="event.stopPropagation();openShareModal('${u.nt_hash}')">×${n}</span>`;
 }
 
 /* ── Current page users (for popup lookup) ───────────────────────── */
@@ -3422,9 +3566,10 @@ function renderTable(users) {
       pwLenCell = '<td style="text-align:center;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">0</td>';
     } else if (u.password) {
       const _pw = decodePw(u.password);
-      const shared = (u.password_count || 1) > 1
-        ? `<span class="pw-shared" title="Shared by ${u.password_count} accounts">×${u.password_count}</span>` : '';
-      const viaLm = u.lm_confirmed
+      // Reuse is reported once, on the hash (see shareBadge) — it's the same
+      // number for a cracked row and it also works when nothing is cracked.
+      const shared = '';
+      const viaLm = (u.lm_confirmed && !u.is_known)
         ? '<span class="pw-lm-tag" title="Confirmed via LM — the recovered uppercase plaintext matched this account\'s NT hash">via LM</span>' : '';
       // Known passwords never took a crack — blue + "known" tag, not green.
       const pwCls = u.is_known ? 'pw-known' : 'pw-cracked';
@@ -3474,7 +3619,7 @@ function renderTable(users) {
       <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
-      <td>${hashCell(u.nt_hash)}</td>
+      <td>${hashCell(u.nt_hash, shareBadge(u))}</td>
       ${hashTypesCell}
       <td>${pwHtml}</td>
       ${pwLenCell}
@@ -3609,10 +3754,76 @@ function closeHistoryModal(e) {
   document.getElementById('hist-modal-overlay').classList.add('hidden');
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Shared-password modal — every account holding one NT hash
+══════════════════════════════════════════════════════════════════════════ */
+let _shareUsers = [];
+
+async function openShareModal(hash) {
+  const overlay = document.getElementById('share-modal-overlay');
+  document.getElementById('share-modal-title').textContent = 'Shared password';
+  document.getElementById('share-modal-sub').textContent   = 'Loading…';
+  document.getElementById('share-modal-body').innerHTML    = '';
+  overlay.classList.remove('hidden');
+
+  try {
+    const qs = new URLSearchParams({ hash, ...excludeParam(), ...machinesParam() });
+    const d  = await api('GET', `/api/hash-users?${qs}`);
+    _shareUsers = d.users || [];
+
+    const pwHtml = d.password == null
+      ? '<span class="pw-none">not recovered</span>'
+      : d.is_known
+      ? `<span class="pw-known">${esc(decodePw(d.password))}</span><span class="pw-known-tag">known</span>`
+      : `<span class="pw-cracked">${esc(decodePw(d.password))}</span>`;
+
+    document.getElementById('share-modal-title').textContent = `${d.count} accounts share this password`;
+    document.getElementById('share-modal-sub').innerHTML =
+      `<span class="hash-text">${d.hash}</span>`;
+
+    const rows = _shareUsers.map(u => {
+      const badges = (u.is_tier0 ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '')
+                   + (u.is_krbtgt ? '<span class="badge-krbtgt">krbtgt</span>' : '')
+                   + (u.is_machine ? '<span class="badge badge-machine" style="margin-left:6px">machine</span>' : '');
+      const note = u.comment
+        ? `<span class="comment-text" title="${esc(u.comment)}">${esc(u.comment)}</span>` : '';
+      return `<div class="share-row">
+        <span class="sr-dom">${esc(u.domain) || '—'}\\</span>
+        <span class="sr-user username-text">${esc(u.username)}</span>
+        ${badges}${note}
+        <span class="sr-rid">RID ${esc(u.rid)}${u.dump_source ? '  ·  ' + esc(u.dump_source) : ''}</span>
+      </div>`;
+    }).join('');
+
+    document.getElementById('share-modal-body').innerHTML = `
+      <div class="share-summary">
+        <span><span class="ss-lbl">Password</span>${pwHtml}</span>
+        <span><span class="ss-lbl">Accounts</span>${d.count}</span>
+        <button class="btn sm client-hide" onclick="copyShareUsers()" style="margin-left:auto">Copy usernames</button>
+      </div>
+      <div class="share-list">${rows || '<div style="color:var(--text-muted)">No accounts in the current scope.</div>'}</div>`;
+  } catch (err) {
+    document.getElementById('share-modal-sub').textContent = '';
+    document.getElementById('share-modal-body').innerHTML =
+      `<div style="color:var(--red);font-size:12px">Error: ${esc(err.message)}</div>`;
+  }
+}
+
+function copyShareUsers() {
+  if (!_shareUsers.length) return;
+  copyText(_shareUsers.map(u => (u.domain ? u.domain + '\\' : '') + u.username).join('\n'));
+}
+
+function closeShareModal(e) {
+  if (e && e.target !== document.getElementById('share-modal-overlay')) return;
+  document.getElementById('share-modal-overlay').classList.add('hidden');
+}
+
 /* Close on Escape */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeHistoryModal();
+    closeShareModal();
     closeModal();
     closeCommentPopover();
   }

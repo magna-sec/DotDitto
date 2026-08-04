@@ -15,13 +15,13 @@
 - **Domain visibility management** — show/hide individual domains from all stats and charts
 - **Domain comparison** — side-by-side crack rate and account stats across any combination of domains
 - **Password history timeline** — click the history button (⏱) in the History column to open a per-account modal showing current → previous passwords, oldest to newest
-- **Shared password detection** — highlights accounts sharing the same plaintext with a reuse badge
+- **Shared password detection** — a `×N` badge beside the NT hash on any account whose password is shared with others; click it to list them. Works on **uncracked** accounts too (identical NT hash ⇒ identical password), with a dedicated **Shared Passwords** analytic on the Analysis tab
 - **Password length column** — displays character count for each cracked password; sortable
 - **"hist cracked" warning** — yellow badge on rows where the current hash is uncracked but a historical password was cracked
 - **Three-tab layout**
   - **Overview** — stats strip, domain comparison, top passwords chart, sortable/filterable user table with copy buttons for hashes and passwords
   - **All Hashes** — per-user NT (RC4), AES-256, AES-128, and DES Kerberos keys with one-click copy
-  - **Analysis** — character-class breakdown, password reuse stats, complexity buckets, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
+  - **Analysis** — shared-password clusters (works with no pot file loaded), character-class breakdown, password reuse stats, complexity buckets, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
 - **Tier-0 user tracking** — load a list of privileged accounts (file, paste, or BloodHound Cypher query); matching rows are flagged with a `T0` badge and a red left border; filter the table to tier-0 accounts only
 - **Per-row notes** — click any Notes cell to attach a free-text annotation to an account (e.g. `SNOW Admin`, `Has 2 VDIs`); notes are saved in the session
 - **Client Mode** — blurs sensitive data for client-facing screen shares; independently toggle hiding of passwords/hashes and/or usernames
@@ -124,7 +124,15 @@ CompanyName1
 Each entry is NT-hashed locally and matched against the dump, so a hit is
 *proof* that account uses that password — but it was never cracked. Matching
 accounts show the plaintext in **blue with a `known` badge** instead of the
-green cracked styling, and:
+green cracked styling.
+
+The known list **overrides** a hashcat crack of the same hash: adding a password
+here re-marks any account already showing it as *known*, and clears its "Added"
+timestamp. That's deliberate — found passwords are routinely pasted into a pot
+file so the tooling picks them up, which would otherwise launder them into the
+crack rate. Clearing the known list restores them to cracked.
+
+Beyond the styling:
 
 - they are **excluded from the crack rate**, the Cracked count, the top-password
   chart, and all Analysis-tab composition stats (a separate **Known** stat card
@@ -138,6 +146,45 @@ green cracked styling, and:
   (`Cracked` / `Known` / `Blank/Disabled`)
 
 Use **Clear Known** to drop the list; affected accounts revert to uncracked.
+
+---
+
+## Shared Passwords
+
+NT hashes are unsalted, so two accounts with the same NT hash are using the same
+password — **whether or not it has been cracked**. That's the one reuse signal
+available before you crack anything, and it's usually the most useful finding in
+a dump.
+
+**On the Overview and All Hashes tables**, any account whose hash is shared gets
+a `×N` badge next to the NT hash — `×14` means 14 accounts in total hold that
+password. Click it for the full list (usernames, RIDs, tier-0 / machine badges,
+notes, source) plus a **Copy usernames** button for reporting. The badge is
+**yellow** when the password is recovered and **red** when it isn't — a red `×40`
+is forty accounts you own the moment one crack lands.
+
+**On the Analysis tab**, the **Shared Passwords** card ranks the largest clusters:
+
+| Metric | Meaning |
+|---|---|
+| Accounts sharing a password | % of accounts whose password is used by at least one other account |
+| Distinct shared passwords | how many separate reused passwords exist |
+| Largest cluster | the biggest single group |
+| Accounts on unrecovered shared passwords | the crack targets with the highest blast radius |
+
+Each row shows the hash, the count, the plaintext (or *not recovered*), and the
+first five members — click any row to open the same list. Clusters containing a
+tier-0 account are flagged `T0`.
+
+Excluded from all of the above: password-history entries (a user's own former
+password isn't reuse) and the empty-password hash (every disabled account carries
+it, so it would report the whole disabled estate as one giant cluster). The
+counts follow the same scope as everything else — hidden domains and the
+machine-account toggle apply, so ticking **Machines** surfaces cloned-image
+workstations sharing a machine password.
+
+The **Export Reuse Report** button writes the same groups to a text file, with
+the option to redact plaintexts.
 
 ---
 
@@ -188,6 +235,18 @@ administrator@corp.local
 krbtgt@corp.local
 svc-backup@corp.local
 ```
+
+Export quoting is stripped automatically, so you can paste straight out of
+BloodHound, a CSV column, or a JSON array without cleaning it up first — all of
+these load as `bob@corp.local`:
+
+```
+"bob@corp.local"
+'bob@corp.local'
+"bob@corp.local",
+```
+
+Blank lines and `#` comments are ignored, and duplicates are collapsed.
 
 Once loaded, matching accounts are flagged with a red `T0` badge in the Username column. Use the **Tier 0 only** filter in the toolbar to scope the table to privileged accounts.
 
@@ -270,6 +329,9 @@ The **Analysis** tab shows:
 - Password length distribution chart
 - Top 30 hashcat mask patterns ranked by frequency with example passwords
 - Top word tokens and common prefixes found in cracked passwords
+- **Shared Passwords** — the largest clusters of accounts sharing one NT hash
+  (see [Shared Passwords](#shared-passwords)); the only card that populates
+  without a pot file loaded
 
 Export masks for cracking:
 

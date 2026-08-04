@@ -5,7 +5,6 @@ All Flask API routes, registered as a Blueprint.
 import csv
 import io
 import json
-from collections import defaultdict
 from datetime import datetime
 
 from flask import Blueprint, Response, jsonify, request
@@ -13,20 +12,23 @@ from flask import Blueprint, Response, jsonify, request
 from analysis import build_word_wordlist, run_analysis
 from parsers import (
     parse_known_passwords,
+    parse_list_entries,
     parse_lm_halves,
     parse_pot_file,
     parse_secretsdump,
 )
 from session_store import (
-    BLANK_NT_HASH,
     add_known_passwords,
     apply_passwords,
+    build_hash_groups,
+    check_is_tier0,
     clear_session,
     get_filtered_users,
     replace_session,
     save_session,
     session,
 )
+from session_store import _build_tier0_lookup
 
 bp = Blueprint("api", __name__)
 
@@ -474,6 +476,113 @@ def get_analysis():
     return jsonify(result)
 
 
+def _group_status(group: list) -> dict:
+    """Describe a shared-hash group's plaintext: cracked, known, or unrecovered.
+
+    Every account in a group holds the same NT hash, so one lookup covers all.
+    """
+    head = group[0]
+    return {
+        "password": head.get("password"),
+        "is_known": bool(head.get("is_known")),
+        "cracked":  head.get("password") is not None and not head.get("is_known"),
+    }
+
+
+@bp.route("/api/hash-users")
+def hash_users():
+    """List every account sharing one NT hash — i.e. sharing one password."""
+    h = (request.args.get("hash") or "").strip().lower()
+    if len(h) != 32:
+        return jsonify({"error": "A 32-character NT hash is required"}), 400
+
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+    groups = build_hash_groups(session["users"], _include_machines(), excluded or None)
+    members = groups.get(h, [])
+
+    tier0_lookup = _build_tier0_lookup(session.get("tier0_users", []))
+    comment_map  = session.get("user_comments", {})
+
+    out = []
+    for u in sorted(members, key=lambda x: (x["domain"].lower(), x["username"].lower())):
+        out.append(
+            {
+                "username":    u["username"],
+                "domain":      u["domain"],
+                "rid":         u["rid"],
+                "is_machine":  u["is_machine"],
+                "is_krbtgt":   bool(u.get("is_krbtgt")),
+                "is_tier0":    bool(u.get("is_krbtgt"))
+                               or check_is_tier0(u["username"], u["domain"], tier0_lookup),
+                "dump_source": u.get("dump_source", ""),
+                "comment":     comment_map.get(
+                    f"{u['domain'].lower()}/{u['username'].lower()}", ""
+                ),
+            }
+        )
+
+    status = (_group_status(members) if members
+              else {"password": None, "is_known": False, "cracked": False})
+    return jsonify({"hash": h, "count": len(out), "users": out, **status})
+
+
+@bp.route("/api/analysis/hash-reuse")
+def get_hash_reuse():
+    """Shared-password clusters, found by grouping identical NT hashes.
+
+    Independent of the pot file — this is the one reuse measure that still works
+    when nothing has been cracked, which is exactly when it matters most.
+    """
+    exclude_raw = request.args.get("exclude_domains", "")
+    excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
+    limit = min(200, max(1, int(request.args.get("limit", 30))))
+
+    groups = build_hash_groups(session["users"], _include_machines(), excluded or None)
+    shared = {h: g for h, g in groups.items() if len(g) > 1}
+
+    total_accounts  = sum(len(g) for g in groups.values())
+    shared_accounts = sum(len(g) for g in shared.values())
+    uncracked = [g for g in shared.values() if g[0].get("password") is None]
+
+    tier0_lookup = _build_tier0_lookup(session.get("tier0_users", []))
+
+    top = sorted(shared.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:limit]
+    out_groups = []
+    for h, g in top:
+        ordered = sorted(g, key=lambda x: (x["domain"].lower(), x["username"].lower()))
+        out_groups.append(
+            {
+                "hash":     h,
+                "count":    len(g),
+                "members":  [
+                    (f"{u['domain']}\\{u['username']}" if u["domain"] else u["username"])
+                    for u in ordered[:5]
+                ],
+                "has_tier0": any(
+                    u.get("is_krbtgt")
+                    or check_is_tier0(u["username"], u["domain"], tier0_lookup)
+                    for u in g
+                ),
+                "has_machine": any(u["is_machine"] for u in g),
+                **_group_status(g),
+            }
+        )
+
+    return jsonify(
+        {
+            "total_accounts":     total_accounts,
+            "shared_groups":      len(shared),
+            "shared_accounts":    shared_accounts,
+            "shared_pct":         round(shared_accounts / total_accounts * 100, 1) if total_accounts else 0.0,
+            "max_group":          max((len(g) for g in shared.values()), default=0),
+            "uncracked_groups":   len(uncracked),
+            "uncracked_accounts": sum(len(g) for g in uncracked),
+            "groups":             out_groups,
+        }
+    )
+
+
 @bp.route("/api/uncracked-hashes")
 def uncracked_hashes():
     include_machines = (
@@ -599,7 +708,8 @@ def export_csv():
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
                 "Password Origin", "Blank/Disabled", "LM Password", "Cracked At",
-                "Shared Count", "Machine", "History", "Hist Index", "Source"])
+                "Shared Count", "Accounts Sharing Hash", "Machine", "History",
+                "Hist Index", "Source"])
     for u in users:
         if u.get("is_blank"):
             origin = "Blank/Disabled"
@@ -619,6 +729,7 @@ def export_csv():
                 u.get("lm_password") or "",
                 u.get("cracked_at") or "",
                 u["password_count"] if u["password"] is not None else "",
+                u.get("hash_count", 1),
                 "Yes" if u["is_machine"] else "No",
                 "Yes" if u["is_history"] else "No",
                 u["hist_index"] if u["hist_index"] >= 0 else "",
@@ -639,20 +750,9 @@ def export_reuse_report():
     excluded = {x.strip() for x in exclude_raw.split(",") if x.strip()}
     show_passwords = request.args.get("show_passwords", "0") == "1"
 
-    inc_mach = _include_machines()
-
-    users = [
-        u for u in session["users"]
-        if not u["is_history"] and (inc_mach or not u["is_machine"])
-        and (not excluded or u["domain"] not in excluded)
-    ]
-
-    hash_groups: dict = defaultdict(list)
-    for u in users:
-        h = u.get("nt_hash", "")
-        if h and len(h) == 32 and h.lower() != BLANK_NT_HASH:
-            hash_groups[h].append(u)
-
+    hash_groups = build_hash_groups(
+        session["users"], _include_machines(), excluded or None
+    )
     duplicates = {h: g for h, g in hash_groups.items() if len(g) > 1}
     lines: list[str] = []
 
@@ -759,11 +859,7 @@ def upload_tier0():
     if not f:
         return jsonify({"error": "No file provided"}), 400
     text = f.read().decode("utf-8", errors="replace")
-    users = [
-        line.strip().lower()
-        for line in text.splitlines()
-        if line.strip() and not line.strip().startswith('#')
-    ]
+    users = parse_list_entries(text)
     session["tier0_users"] = users
     save_session()
     return jsonify({"success": True, "count": len(users)})
@@ -775,11 +871,7 @@ def paste_tier0():
     text = data.get("text", "")
     if not text.strip():
         return jsonify({"error": "No text provided"}), 400
-    users = [
-        line.strip().lower()
-        for line in text.splitlines()
-        if line.strip() and not line.strip().startswith('#')
-    ]
+    users = parse_list_entries(text)
     session["tier0_users"] = users
     save_session()
     return jsonify({"success": True, "count": len(users)})

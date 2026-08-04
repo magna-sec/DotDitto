@@ -168,6 +168,40 @@ def parse_pot_file(text: str) -> dict:
     return pot
 
 
+# Straight and smart quote characters — Word/Excel and some exports use the
+# curly variants, and they wrap values just the same.
+_QUOTE_CHARS = "\"'‘’“”"
+
+
+def clean_list_entry(line: str) -> str:
+    """Unwrap one line of an exported list into a bare value.
+
+    BloodHound, CSV and JSON exports quote their values and often leave the list
+    comma on the end — ``"bob@corp.local",`` — none of which is part of the
+    account name. Stripped here so the entry matches a dump user.
+    """
+    line = line.strip().rstrip(",")
+    return line.strip(_QUOTE_CHARS + " \t").strip()
+
+
+def parse_list_entries(text: str) -> list:
+    """Parse a one-entry-per-line list (e.g. tier-0 accounts), lowercased.
+
+    Blank lines and ``#`` comments are skipped; every other line is unwrapped by
+    :func:`clean_list_entry`. Order is preserved and duplicates are collapsed.
+    """
+    out: list[str] = []
+    seen: set = set()
+    for raw in text.splitlines():
+        if not raw.strip() or raw.strip().startswith("#"):
+            continue
+        entry = clean_list_entry(raw).lower()
+        if entry and entry not in seen:
+            seen.add(entry)
+            out.append(entry)
+    return out
+
+
 def parse_known_passwords(text: str) -> list:
     """Parse a list of *known* plaintext passwords — one per line.
 

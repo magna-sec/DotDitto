@@ -8,6 +8,8 @@ import os
 import struct
 from datetime import datetime, timedelta
 
+from parsers import clean_list_entry
+
 SESSION_FILE = "session.json"
 
 # MD4("") — the NT hash of an empty password. Shows up for accounts with a
@@ -301,13 +303,20 @@ def apply_passwords() -> None:
         # Sourced from network shares, scripts, documentation… They're matched
         # by NT hash, so the plaintext is proven correct for this account — but
         # it was never actually cracked, so it's flagged separately and kept
-        # out of the crack rate. A real pot crack always wins over a known one.
+        # out of the crack rate.
+        #
+        # The known list *overrides* a pot hit rather than deferring to it: a
+        # password found lying around is routinely pasted into the pot file so
+        # the tooling picks it up, which would otherwise launder it into a
+        # crack. The known list is the authority on where a plaintext came
+        # from, so it also clears cracked_at — there was no crack event.
         user["is_known"] = False
-        if user["password"] is None and not is_blank:
+        if not is_blank:
             kp = known.get(user["nt_hash"])
             if kp is not None:
-                user["password"]  = kp
-                user["is_known"]  = True
+                user["password"]   = kp
+                user["is_known"]   = True
+                user["cracked_at"] = None
 
     # Count how many (non-history) user accounts share each plaintext.
     # Blank passwords (falsy "") are naturally excluded here.
@@ -318,6 +327,43 @@ def apply_passwords() -> None:
 
     for user in session["users"]:
         user["password_count"] = pw_counts.get(user["password"], 1) if user["password"] else 1
+
+
+# ---------------------------------------------------------------------------
+# Shared-password detection (NT hash grouping)
+# ---------------------------------------------------------------------------
+
+def build_hash_groups(
+    users: list,
+    include_machines: bool = True,
+    exclude_domains: set | None = None,
+) -> dict:
+    """Group accounts by NT hash — the reuse signal that works *before* cracking.
+
+    NT hashes are unsalted, so an identical hash on two accounts means an
+    identical password, whether or not anyone has cracked it. A group of N is
+    N users sharing one password.
+
+    History entries are skipped (a user's own former password isn't reuse), as
+    is the empty-password hash — every blank/disabled account carries it, so
+    grouping on it would report the entire disabled estate as one giant cluster.
+
+    Returns {nt_hash: [user, …]} including single-account groups; callers filter
+    for len > 1 when they only want actual sharing.
+    """
+    groups: dict[str, list] = {}
+    for u in users:
+        if u.get("is_history"):
+            continue
+        if u.get("is_machine") and not include_machines:
+            continue
+        if exclude_domains and u.get("domain") in exclude_domains:
+            continue
+        h = (u.get("nt_hash") or "").lower()
+        if len(h) != 32 or h == BLANK_NT_HASH:
+            continue
+        groups.setdefault(h, []).append(u)
+    return groups
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +378,10 @@ def _build_tier0_lookup(tier0_list: list) -> set:
     """
     lookup: set = set()
     for entry in tier0_list:
-        e = entry.strip().lower()
+        # Unwrap here too, not just at upload: sessions saved before the
+        # unwrapping existed — and JSON imports from elsewhere — can still hold
+        # quoted entries like "bob@corp.local", which would never match.
+        e = clean_list_entry(entry).lower()
         if not e or e.startswith('#'):
             continue
         lookup.add(e)
@@ -403,6 +452,14 @@ def get_filtered_users(
     # Sort history ascending by index: hist_0 = previous, hist_N = oldest
     for entries in history_map.values():
         entries.sort(key=lambda x: x["hist_index"])
+
+    # Shared-password counts are deliberately computed over the whole visible
+    # population, *before* the search/cracked/domain filters below: "14 accounts
+    # share this password" is a fact about the engagement, not about whatever is
+    # currently typed in the search box.
+    share_groups = build_hash_groups(
+        current, include_machines=show_machines, exclude_domains=exclude_domains
+    )
 
     s_lower = search.lower() if search else ""
 
@@ -504,6 +561,7 @@ def get_filtered_users(
         else:
             u_out["history"] = []
         u_out["is_tier0"] = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
+        u_out["hash_count"] = len(share_groups.get(u["nt_hash"], ())) or 1
         ck = f"{u['domain'].lower()}/{u['username'].lower()}"
         u_out["comment"] = comment_map.get(ck, "")
         result.append(u_out)
