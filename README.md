@@ -23,7 +23,7 @@
   - **All Hashes** — per-user NT (RC4), AES-256, AES-128, and DES Kerberos keys with one-click copy
   - **Analysis** — shared-password clusters (works with no pot file loaded), character-class breakdown, password reuse stats, complexity buckets, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
 - **Tier-0 user tracking** — load a list of privileged accounts (file, paste, or BloodHound Cypher query); matching rows are flagged with a `T0` badge and a red left border; filter the table to tier-0 accounts only
-- **BloodHound import** — load a neo4j CSV export (users/computers with groups + enabled status); disabled accounts are badged and dimmed, clicking a username shows its group membership, and the search bar gains a group-member lookup (see [BloodHound Import](#bloodhound-import))
+- **BloodHound import** — load a neo4j CSV/JSON export (users/computers with groups + enabled status); disabled accounts are badged and dimmed, clicking a username shows its group membership, the search bar gains a group-member lookup, and groups can be tagged (e.g. `privileged`) to filter the table to their members (see [BloodHound Import](#bloodhound-import))
 - **Per-row notes** — click any Notes cell to attach a free-text annotation to an account (e.g. `SNOW Admin`, `Has 2 VDIs`); notes are saved in the session
 - **Client Mode** — blurs sensitive data for client-facing screen shares; independently toggle hiding of passwords/hashes and/or usernames
 - **Themes** — Dark (default), Professional (clean light), Terminal (green phosphor), Synthwave (retro neon), Classic (Windows 95), Contrast (neon pink/cyan)
@@ -283,10 +283,26 @@ Once loaded:
 - the **search field** dropdown gains **Group member** — search for a group name
   to list every member of it. Groups are searched *only* when this field is
   selected; the default *All fields* search never matches on group membership
-- **CSV export** gains **AD Enabled** and **Groups** columns
+- **CSV export** gains **AD Enabled**, **Groups**, and **Group Tags** columns
 
 Use **Clear** in the panel to drop the imported data. It's saved with the
 session and restored on reload.
+
+### Group tags
+
+Inside the group popup, each group has a **+ tag** box. Type any label —
+`privileged`, `bypasses mfa`, `can reset passwords`, whatever is useful for the
+engagement — and press Enter to tag that group; the `×` on a tag chip removes it.
+Tags are free-text and a group can carry several; an autocomplete offers tags
+already in use so spellings stay consistent.
+
+Every distinct tag then appears in the **user-scope dropdown** (alongside *All
+users* and *Tier 0 only*) as **Tag: &lt;name&gt;**. Selecting it scopes the table
+to every account that is a member of *any* group carrying that tag — e.g. tag the
+handful of groups that lead to Domain Admin as `privileged`, then filter to
+everyone who can reach DA. Tagged accounts also show the tag as a badge in the
+Username column, and tags export in the **Group Tags** CSV column. Tags are saved
+with the session.
 
 ---
 

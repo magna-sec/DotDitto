@@ -655,15 +655,39 @@
     .username-text.has-groups:hover { color: var(--blue); border-bottom-color: var(--blue); }
     .group-list { list-style: none; margin: 0; padding: 0; }
     .group-list li {
-      display: flex; align-items: baseline; gap: 9px;
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
       font-size: 13px; font-family: var(--font-mono); color: var(--text);
-      padding: 6px 4px; border-bottom: 1px solid var(--border);
+      padding: 8px 4px; border-bottom: 1px solid var(--border);
       word-break: break-all;
     }
     .group-list li:last-child { border-bottom: none; }
-    .group-list li::before {
+    .group-list .g-name {
+      display: flex; align-items: baseline; gap: 9px; flex: 1 1 200px; min-width: 0;
+    }
+    .group-list .g-name::before {
       content: "•"; color: var(--blue); flex: 0 0 auto; font-size: 14px; line-height: 1;
     }
+    /* Free-text tag on a group ("privileged", "bypasses mfa", …) */
+    .g-tagchip, .tag-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; font-weight: 700; font-family: var(--font-sans, inherit);
+      padding: 1px 7px; border-radius: 4px; letter-spacing: .03em;
+      background: var(--yellow-dim); color: var(--yellow);
+      border: 1px solid rgba(227,179,65,.45); white-space: nowrap; vertical-align: middle;
+    }
+    .tag-badge { margin-left: 6px; }
+    .g-tagchip button {
+      background: none; border: none; color: inherit; cursor: pointer;
+      font-size: 12px; line-height: 1; padding: 0; opacity: .7;
+    }
+    .g-tagchip button:hover { opacity: 1; }
+    .g-tag-input {
+      font-size: 11px; font-family: var(--font-sans, inherit);
+      padding: 2px 7px; border-radius: 4px;
+      background: var(--bg); color: var(--text); border: 1px dashed var(--border2);
+      width: 110px; flex: 0 0 auto;
+    }
+    .g-tag-input:focus { outline: none; border-color: var(--yellow); border-style: solid; }
 
     .badge-krbtgt {
       display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
@@ -1684,6 +1708,7 @@
     <div class="hist-modal-body" id="groups-modal-body"></div>
   </div>
 </div>
+<datalist id="all-tags-datalist"></datalist>
 
 <!-- ─── Comment edit popover ─────────────────────────────────────────────── -->
 <div id="comment-popover" class="comment-popover hidden">
@@ -2372,6 +2397,7 @@ const state = {
   domain:      'all',
   source:      'all',
   tier0Only:   false,
+  tag:         '',
   addedWithin: '',
   hashType:    'all',
   lastParams: {},
@@ -2887,7 +2913,9 @@ function filterChanged() {
   state.cracked      = document.getElementById('filter-cracked').value;
   state.domain       = document.getElementById('filter-domain').value;
   state.source       = document.getElementById('filter-source').value;
-  state.tier0Only    = document.getElementById('filter-tier0').value === 'tier0';
+  const scope = document.getElementById('filter-tier0').value;
+  state.tier0Only    = scope === 'tier0';
+  state.tag          = scope.startsWith('tag:') ? scope.slice(4) : '';
   state.addedWithin  = document.getElementById('filter-added').value;
   state.hashType     = document.getElementById('filter-hashtype').value;
   state.page = 1;
@@ -2955,6 +2983,7 @@ async function loadUsers() {
     sort_by:      state.sortCol,
     sort_dir:     state.sortDir,
     tier0_only:   state.tier0Only,
+    tag:          state.tag,
     added_within: state.addedWithin,
     hash_type:    state.hashType,
     ...excludeParam(),
@@ -2979,11 +3008,13 @@ async function loadUsers() {
 
 async function initSession() {
   try {
-    const [info, t0, bh] = await Promise.all([
+    const [info, t0, bh, gt] = await Promise.all([
       api('GET', '/api/session'),
       api('GET', '/api/tier0'),
       api('GET', '/api/bloodhound'),
+      api('GET', '/api/group-tags'),
     ]);
+    _applyGroupTagsData(gt);
     state.hasDump  = info.has_dump;
     state.hasPot   = info.has_pot;
     state.hasKnown = !!info.has_known;
@@ -3617,7 +3648,10 @@ function usernameCellInner(u, idx, src) {
   const nameSpan = `<span class="${cls}"${click}${title}>${esc(u.username)}</span>`;
   const disabled = u.enabled === false
     ? '<span class="badge-disabled" title="Account disabled in AD (per BloodHound import)">disabled</span>' : '';
-  return nameSpan + disabled;
+  const tags = Array.isArray(u.tags)
+    ? u.tags.map(t => `<span class="tag-badge" title="Member of a group tagged '${esc(t)}'">${esc(t)}</span>`).join('')
+    : '';
+  return nameSpan + disabled + tags;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -3921,16 +3955,19 @@ function closeShareModal(e) {
 /* ══════════════════════════════════════════════════════════════════════════
    Group membership popup (BloodHound) — opened by clicking a username
 ══════════════════════════════════════════════════════════════════════════ */
-let _groupsModalGroups = [];
+let _groupsModalList = [];   // sorted group names for the open account (index = idx used by tag fns)
+let _groupsModalUser = null;
+
 function copyGroupsModal() {
-  if (_groupsModalGroups.length) copyText(_groupsModalGroups.join('\n'));
+  if (_groupsModalList.length) copyText(_groupsModalList.join('\n'));
 }
 
 function openGroupsModal(src, idx) {
   const u = (src === 'hash' ? _hashPageUsers : _pageUsers)[idx];
   if (!u) return;
-  const groups = Array.isArray(u.groups) ? u.groups : [];
-  _groupsModalGroups = groups;
+  _groupsModalUser = u;
+  _groupsModalList = (Array.isArray(u.groups) ? u.groups.slice() : [])
+    .sort((a, b) => a.localeCompare(b));
 
   document.getElementById('groups-modal-title').textContent =
     (u.domain ? u.domain + '\\' : '') + u.username;
@@ -3938,26 +3975,41 @@ function openGroupsModal(src, idx) {
   const statusBits = [];
   if (u.enabled === false)      statusBits.push('<span class="badge-disabled">disabled</span>');
   else if (u.enabled === true)  statusBits.push('<span style="color:var(--green)">enabled</span>');
-  statusBits.push(`${groups.length} group${groups.length === 1 ? '' : 's'}`);
+  statusBits.push(`${_groupsModalList.length} group${_groupsModalList.length === 1 ? '' : 's'}`);
   document.getElementById('groups-modal-sub').innerHTML =
     `RID: ${esc(u.rid)}  ·  ` + statusBits.join('  ·  ');
 
-  const body = document.getElementById('groups-modal-body');
-  if (groups.length) {
-    const items = groups
-      .slice()
-      .sort((a, b) => a.localeCompare(b))
-      .map(g => `<li>${esc(g)}</li>`)
-      .join('');
-    body.innerHTML =
-      `<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-         <button class="btn sm client-hide" onclick="copyGroupsModal()">Copy groups</button>
-       </div>
-       <ul class="group-list">${items}</ul>`;
-  } else {
-    body.innerHTML = `<div style="color:var(--text-muted);font-size:12px">No group membership recorded for this account in the BloodHound import.</div>`;
-  }
+  renderGroupsModalBody();
   document.getElementById('groups-modal-overlay').classList.remove('hidden');
+}
+
+/* Render the group list with per-group tag chips + an inline "add tag" input.
+   Re-run after any tag change so the popup reflects the saved state. */
+function renderGroupsModalBody() {
+  const body = document.getElementById('groups-modal-body');
+  if (!_groupsModalList.length) {
+    body.innerHTML = `<div style="color:var(--text-muted);font-size:12px">No group membership recorded for this account in the BloodHound import.</div>`;
+    return;
+  }
+  const items = _groupsModalList.map((g, i) => {
+    const tags = _groupTagsOf(g);
+    const chips = tags.map((t, ti) =>
+      `<span class="g-tagchip">${esc(t)}<button title="Remove tag" onclick="removeTagFromGroup(${i},${ti})">×</button></span>`
+    ).join('');
+    return `<li>
+      <span class="g-name">${esc(g)}</span>
+      ${chips}
+      <input class="g-tag-input" list="all-tags-datalist" placeholder="+ tag"
+             title="Tag this group (e.g. privileged, bypasses mfa) — Enter to add"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addTagToGroup(${i}, this.value, this);}">
+    </li>`;
+  }).join('');
+  body.innerHTML =
+    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+       <span style="font-size:11px;color:var(--text-muted)">Add a tag to a group (e.g. <b>privileged</b>), then filter by it in the user-scope dropdown.</span>
+       <button class="btn sm client-hide" style="margin-left:auto" onclick="copyGroupsModal()">Copy groups</button>
+     </div>
+     <ul class="group-list">${items}</ul>`;
 }
 
 function closeGroupsModal(e) {
@@ -4613,6 +4665,91 @@ function setBHStatus(count, disabled, label) {
   if (countEl) countEl.textContent = on
     ? `${label}${disabled ? '  ·  ' + disabled + ' disabled' : ''}` : 'None loaded';
   if (clearBtn) clearBtn.disabled = !on;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Group tags — free-text labels applied to BloodHound groups (from the groups
+   popup) that become filters in the user-scope dropdown.
+══════════════════════════════════════════════════════════════════════════ */
+let _groupTags = {};   // { "<exact group name>": ["privileged", ...] }
+let _allTags   = [];   // distinct tags in use, sorted
+
+function _applyGroupTagsData(d) {
+  _groupTags = d.tags || {};
+  _allTags   = d.all_tags || [];
+  rebuildScopeFilter();
+  refreshTagsDatalist();
+}
+
+async function loadGroupTags() {
+  try { _applyGroupTagsData(await api('GET', '/api/group-tags')); }
+  catch (err) { console.error('group-tags error', err); }
+}
+
+function refreshTagsDatalist() {
+  const dl = document.getElementById('all-tags-datalist');
+  if (dl) dl.innerHTML = _allTags.map(t => `<option value="${esc(t)}">`).join('');
+}
+
+/* Rebuild the All users / Tier 0 / Tag:… scope dropdown, preserving selection. */
+function rebuildScopeFilter() {
+  const sel = document.getElementById('filter-tier0');
+  if (!sel) return;
+  const prev = sel.value;
+  let opts = '<option value="all">All users</option>'
+           + '<option value="tier0">Tier 0 only</option>';
+  if (_allTags.length) {
+    opts += '<optgroup label="Group tags">'
+          + _allTags.map(t => `<option value="tag:${esc(t)}">Tag: ${esc(t)}</option>`).join('')
+          + '</optgroup>';
+  }
+  sel.innerHTML = opts;
+  // Restore the previous selection when it still exists; otherwise fall back to
+  // "all" and clear a now-removed tag filter.
+  if ([...sel.options].some(o => o.value === prev)) {
+    sel.value = prev;
+  } else {
+    sel.value = 'all';
+    state.tier0Only = false;
+    state.tag = '';
+  }
+}
+
+function _groupTagsOf(name) { return (_groupTags[name] || []).slice(); }
+
+async function _saveGroupTags(name, tags) {
+  const res = await api('POST', '/api/group-tags', { group: name, tags });
+  if (res.tags && res.tags.length) _groupTags[name] = res.tags;
+  else delete _groupTags[name];
+  _allTags = res.all_tags || [];
+  rebuildScopeFilter();
+  refreshTagsDatalist();
+}
+
+async function addTagToGroup(idx, value, inputEl) {
+  const name = _groupsModalList[idx];
+  const tag  = (value || '').trim();
+  if (!name || !tag) return;
+  const tags = _groupTagsOf(name);
+  if (!tags.some(t => t.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+  if (inputEl) inputEl.value = '';
+  try {
+    await _saveGroupTags(name, tags);
+    renderGroupsModalBody();
+    if (state.hasDump) await loadUsers();   // refresh row tag badges + active filter
+  } catch (err) { toast(`Tag error: ${err.message}`, 'error'); }
+}
+
+async function removeTagFromGroup(idx, tagIdx) {
+  const name = _groupsModalList[idx];
+  if (!name) return;
+  const tags = _groupTagsOf(name);
+  tags.splice(tagIdx, 1);
+  try {
+    await _saveGroupTags(name, tags);
+    renderGroupsModalBody();
+    if (state.hasDump) await loadUsers();
+  } catch (err) { toast(`Tag error: ${err.message}`, 'error'); }
 }
 
 function setTier0Status(count, label) {

@@ -47,6 +47,7 @@ session: dict = {
     "tier0_users": [],    # list of lowercase "user@domain" strings
     "user_comments": {},  # keyed by "domain/username" (lowercase)
     "bloodhound": [],     # BloodHound records: {samaccountname, domain, enabled, groups}
+    "group_tags": {},     # group name -> [free-text tags] e.g. "privileged", "bypasses mfa"
 }
 
 
@@ -133,6 +134,7 @@ def load_session_file() -> None:
             session.setdefault("tier0_users", [])
             session.setdefault("user_comments", {})
             session.setdefault("bloodhound", [])
+            session.setdefault("group_tags", {})
             session.setdefault("pot_added", {})
             session.setdefault("known_passwords", {})
             session.setdefault("lm_halves", {})
@@ -170,6 +172,7 @@ def clear_session() -> None:
             "tier0_users": [],
             "user_comments": {},
             "bloodhound": [],
+            "group_tags": {},
         }
     )
     save_session()
@@ -186,6 +189,7 @@ def replace_session(data: dict) -> None:
     session.setdefault("tier0_users", [])
     session.setdefault("user_comments", {})
     session.setdefault("bloodhound", [])
+    session.setdefault("group_tags", {})
     session.setdefault(
         "metadata",
         {"created": None, "updated": None, "dump_sources": [], "pot_sources": [],
@@ -457,6 +461,38 @@ def bloodhound_record(username: str, domain: str, lookup: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Group tags (free-text labels on BloodHound groups, e.g. "privileged")
+# ---------------------------------------------------------------------------
+
+def _build_group_tag_lookup(group_tags: dict) -> dict:
+    """Index group_tags by lowercased group name for case-insensitive matching.
+
+    Returns {group_name_lower: [tags]}. Groups with an empty tag list are
+    dropped so lookups and the "any tags at all" test stay cheap.
+    """
+    lookup: dict = {}
+    for name, tags in (group_tags or {}).items():
+        clean = [t for t in (tags or []) if t]
+        if clean:
+            lookup[name.lower()] = clean
+    return lookup
+
+
+def tags_for_groups(groups: list, tag_lookup: dict) -> list:
+    """All distinct tags carried by any of ``groups`` (order-stable, de-duped)."""
+    if not tag_lookup or not groups:
+        return []
+    out: list = []
+    seen: set = set()
+    for g in groups:
+        for t in tag_lookup.get(g.lower(), ()):
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Filtering / sorting
 # ---------------------------------------------------------------------------
 
@@ -474,11 +510,14 @@ def get_filtered_users(
     tier0_only: bool = False,
     added_within_hours: float | None = None,
     hash_type: str = "all",
+    tag: str = "",
 ) -> list:
     all_users = session["users"]
     tier0_lookup  = _build_tier0_lookup(session.get("tier0_users", []))
     bh_lookup     = _build_bloodhound_lookup(session.get("bloodhound", []))
+    tag_lookup    = _build_group_tag_lookup(session.get("group_tags", {}))
     comment_map   = session.get("user_comments", {})
+    tag_l = (tag or "").strip().lower()
 
     added_cutoff = (
         datetime.now() - timedelta(hours=added_within_hours)
@@ -549,6 +588,14 @@ def get_filtered_users(
         is_t0 = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
         if tier0_only and not is_t0:
             return False
+        # Group-tag filter: keep only accounts in a group carrying the chosen
+        # tag (case-insensitive). Uses the same BloodHound group membership.
+        if tag_l:
+            rec = bloodhound_record(u["username"], u["domain"], bh_lookup)
+            groups = rec.get("groups", []) if rec else []
+            if not any(tag_l in (t.lower() for t in tag_lookup.get(g.lower(), ()))
+                       for g in groups):
+                return False
         if hash_type != "all":
             if hash_type == "lm" and not u.get("has_lm"):
                 return False
@@ -621,6 +668,7 @@ def get_filtered_users(
         u_out["enabled"]       = bh.get("enabled") if bh else None
         u_out["groups"]        = bh.get("groups", []) if bh else []
         u_out["in_bloodhound"] = bh is not None
+        u_out["tags"]          = tags_for_groups(u_out["groups"], tag_lookup)
         u_out["hash_count"] = len(share_groups.get(u["nt_hash"], ())) or 1
         ck = f"{u['domain'].lower()}/{u['username'].lower()}"
         u_out["comment"] = comment_map.get(ck, "")

@@ -322,6 +322,7 @@ def get_users():
         tier0_only      = request.args.get("tier0_only", "false") == "true",
         added_within_hours = _parse_added_within(request.args.get("added_within", "")),
         hash_type       = request.args.get("hash_type", "all"),
+        tag             = request.args.get("tag", ""),
     )
 
     total  = len(users)
@@ -704,13 +705,14 @@ def export_csv():
         tier0_only      = request.args.get("tier0_only", "false") == "true",
         added_within_hours = _parse_added_within(request.args.get("added_within", "")),
         hash_type       = request.args.get("hash_type", "all"),
+        tag             = request.args.get("tag", ""),
     )
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
                 "Password Origin", "Blank/Disabled", "LM Password", "Cracked At",
                 "Shared Count", "Accounts Sharing Hash", "Machine", "History",
-                "Hist Index", "Source", "AD Enabled", "Groups"])
+                "Hist Index", "Source", "AD Enabled", "Groups", "Group Tags"])
     for u in users:
         if u.get("is_blank"):
             origin = "Blank/Disabled"
@@ -737,6 +739,7 @@ def export_csv():
                 u.get("dump_source", ""),
                 "" if u.get("enabled") is None else ("Yes" if u.get("enabled") else "No"),
                 "; ".join(u.get("groups", [])),
+                "; ".join(u.get("tags", [])),
             ]
         )
     buf.seek(0)
@@ -936,6 +939,57 @@ def clear_bloodhound():
     session["bloodhound"] = []
     save_session()
     return jsonify({"success": True})
+
+
+# ---------------------------------------------------------------------------
+# Group tags — free-text labels on BloodHound groups ("privileged", "bypasses
+# mfa", …). Tagged from the per-user groups popup; each distinct tag becomes a
+# filter in the user-scope dropdown, scoping the table to members of any group
+# carrying that tag.
+# ---------------------------------------------------------------------------
+
+def _distinct_tags(group_tags: dict) -> list:
+    """All distinct tags in use, sorted case-insensitively."""
+    seen: dict = {}
+    for tags in (group_tags or {}).values():
+        for t in (tags or []):
+            seen.setdefault(t.lower(), t)
+    return [seen[k] for k in sorted(seen)]
+
+
+@bp.route("/api/group-tags", methods=["GET"])
+def get_group_tags():
+    gt = session.get("group_tags", {})
+    return jsonify({"tags": gt, "all_tags": _distinct_tags(gt)})
+
+
+@bp.route("/api/group-tags", methods=["POST"])
+def set_group_tags():
+    """Replace the tag list for one group. An empty list clears it."""
+    data  = request.get_json(silent=True) or {}
+    group = (data.get("group") or "").strip()
+    if not group:
+        return jsonify({"error": "No group provided"}), 400
+
+    raw = data.get("tags", [])
+    if not isinstance(raw, list):
+        return jsonify({"error": "tags must be a list"}), 400
+    # Normalise: trim, drop blanks, de-dupe case-insensitively (first spelling wins)
+    seen: dict = {}
+    for t in raw:
+        t = str(t).strip()
+        if t:
+            seen.setdefault(t.lower(), t)
+    tags = list(seen.values())
+
+    gt = session.setdefault("group_tags", {})
+    if tags:
+        gt[group] = tags
+    else:
+        gt.pop(group, None)
+    save_session()
+    return jsonify({"success": True, "group": group, "tags": tags,
+                    "all_tags": _distinct_tags(gt)})
 
 
 @bp.route("/api/comment", methods=["POST"])
