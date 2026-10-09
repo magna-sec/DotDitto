@@ -267,13 +267,18 @@ def _normalize_groups(raw) -> list:
     return _split_group_cell(str(raw) if raw is not None else "")
 
 
-def _make_bh_record(sam: str, name: str, enabled_raw, groups_raw) -> dict | None:
+def _make_bh_record(sam: str, name: str, enabled_raw, groups_raw,
+                    tier0_raw=None, tier0_groups_raw=None) -> dict | None:
     """Build one BloodHound record from already-separated fields.
 
     Shared by the CSV and JSON loaders. Recovers the domain from the principal
     name — users are ``SAM@DNS.DOMAIN``, computers are ``HOST.DNS.DOMAIN`` (no
     ``@``) — and falls back to the name for the SAM when it's missing. Returns
     ``None`` when there's no usable account name.
+
+    ``tier0`` is whether the node itself is tagged tier-zero; ``tier0_groups``
+    are the account's group memberships that are tier-zero — a non-empty list
+    means the account reaches tier-0 through a group even if not tagged directly.
     """
     sam  = (sam or "").strip().strip(_QUOTE_CHARS + " \t")
     name = (name or "").strip().strip(_QUOTE_CHARS + " \t")
@@ -292,11 +297,14 @@ def _make_bh_record(sam: str, name: str, enabled_raw, groups_raw) -> dict | None
         return None
 
     enabled = enabled_raw if isinstance(enabled_raw, bool) else _parse_bool(enabled_raw)
+    tier0   = tier0_raw if isinstance(tier0_raw, bool) else _parse_bool(tier0_raw)
     return {
         "samaccountname": sam,
         "domain": domain,
         "enabled": enabled,
         "groups": _normalize_groups(groups_raw),
+        "tier0": bool(tier0),
+        "tier0_groups": _normalize_groups(tier0_groups_raw),
     }
 
 
@@ -357,6 +365,8 @@ def parse_bloodhound_json(text: str) -> list:
             low.get("name") or low.get("principal") or "",
             low.get("enabled"),
             low.get("groups") or low.get("memberof") or [],
+            low.get("tier0") if low.get("tier0") is not None else low.get("is_tier0"),
+            low.get("tier0_groups") or low.get("tier0groups") or [],
         )
         if rec:
             out.append(rec)
@@ -382,6 +392,8 @@ def parse_bloodhound_csv(text: str) -> list:
     i_name   = col("name", "principal", "n.name")
     i_enab   = col("enabled", "n.enabled")
     i_groups = col("groups", "group", "memberof")
+    i_t0     = col("tier0", "is_tier0", "n.tier0")
+    i_t0grp  = col("tier0_groups", "tier0groups")
 
     out: list = []
     for row in rows[1:]:
@@ -392,7 +404,7 @@ def parse_bloodhound_csv(text: str) -> list:
             return row[idx] if 0 <= idx < len(row) else ""
 
         rec = _make_bh_record(cell(i_sam), cell(i_name), cell(i_enab),
-                              cell(i_groups))
+                              cell(i_groups), cell(i_t0), cell(i_t0grp))
         if rec:
             out.append(rec)
     return out

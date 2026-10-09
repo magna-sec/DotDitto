@@ -48,6 +48,7 @@ session: dict = {
     "user_comments": {},  # keyed by "domain/username" (lowercase)
     "bloodhound": [],     # BloodHound records: {samaccountname, domain, enabled, groups}
     "group_tags": {},     # group name -> [free-text tags] e.g. "privileged", "bypasses mfa"
+    "user_tags": {},      # "domain/username" (lowercase) -> [free-text tags], for accounts tagged directly
 }
 
 
@@ -135,6 +136,7 @@ def load_session_file() -> None:
             session.setdefault("user_comments", {})
             session.setdefault("bloodhound", [])
             session.setdefault("group_tags", {})
+            session.setdefault("user_tags", {})
             session.setdefault("pot_added", {})
             session.setdefault("known_passwords", {})
             session.setdefault("lm_halves", {})
@@ -173,6 +175,7 @@ def clear_session() -> None:
             "user_comments": {},
             "bloodhound": [],
             "group_tags": {},
+            "user_tags": {},
         }
     )
     save_session()
@@ -190,6 +193,7 @@ def replace_session(data: dict) -> None:
     session.setdefault("user_comments", {})
     session.setdefault("bloodhound", [])
     session.setdefault("group_tags", {})
+    session.setdefault("user_tags", {})
     session.setdefault(
         "metadata",
         {"created": None, "updated": None, "dump_sources": [], "pot_sources": [],
@@ -516,6 +520,7 @@ def get_filtered_users(
     tier0_lookup  = _build_tier0_lookup(session.get("tier0_users", []))
     bh_lookup     = _build_bloodhound_lookup(session.get("bloodhound", []))
     tag_lookup    = _build_group_tag_lookup(session.get("group_tags", {}))
+    user_tag_map  = session.get("user_tags", {})
     comment_map   = session.get("user_comments", {})
     tag_l = (tag or "").strip().lower()
 
@@ -585,16 +590,28 @@ def get_filtered_users(
                 return False
         # krbtgt is always treated as tier-0 (its hash is critical), even when
         # no tier-0 list is loaded.
-        is_t0 = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
-        if tier0_only and not is_t0:
-            return False
-        # Group-tag filter: keep only accounts in a group carrying the chosen
-        # tag (case-insensitive). Uses the same BloodHound group membership.
+        if tier0_only:
+            rec = bloodhound_record(u["username"], u["domain"], bh_lookup)
+            bh_t0 = bool(rec and (rec.get("tier0") or rec.get("tier0_groups")))
+            is_t0 = (u.get("is_krbtgt")
+                     or check_is_tier0(u["username"], u["domain"], tier0_lookup)
+                     or bh_t0)
+            if not is_t0:
+                return False
+        # Tag filter: keep accounts carrying the chosen tag (case-insensitive),
+        # whether via a tagged group (BloodHound membership) or tagged directly
+        # on the account itself — the latter works even for accounts BloodHound
+        # never found.
         if tag_l:
             rec = bloodhound_record(u["username"], u["domain"], bh_lookup)
             groups = rec.get("groups", []) if rec else []
-            if not any(tag_l in (t.lower() for t in tag_lookup.get(g.lower(), ()))
-                       for g in groups):
+            group_has = any(
+                tag_l in (t.lower() for t in tag_lookup.get(g.lower(), ()))
+                for g in groups
+            )
+            uk = f"{u['domain'].lower()}/{u['username'].lower()}"
+            user_has = tag_l in (t.lower() for t in user_tag_map.get(uk, ()))
+            if not (group_has or user_has):
                 return False
         if hash_type != "all":
             if hash_type == "lm" and not u.get("has_lm"):
@@ -661,16 +678,30 @@ def get_filtered_users(
             u_out["history"] = history_map.get(key, [])
         else:
             u_out["history"] = []
-        u_out["is_tier0"] = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
-        # BloodHound enrichment: enabled flag + group membership. enabled is
-        # None when the account wasn't in the import (unknown, not "enabled").
+        # BloodHound enrichment: enabled flag + group membership + tier-0. enabled
+        # is None when the account wasn't in the import (unknown, not "enabled").
         bh = bloodhound_record(u["username"], u["domain"], bh_lookup)
         u_out["enabled"]       = bh.get("enabled") if bh else None
         u_out["groups"]        = bh.get("groups", []) if bh else []
+        u_out["tier0_groups"]  = bh.get("tier0_groups", []) if bh else []
         u_out["in_bloodhound"] = bh is not None
-        u_out["tags"]          = tags_for_groups(u_out["groups"], tag_lookup)
-        u_out["hash_count"] = len(share_groups.get(u["nt_hash"], ())) or 1
+        # Tier-0 from any source: krbtgt, the manually-loaded tier-0 list, or
+        # BloodHound (the node is tagged tier-zero, or it's in a tier-zero group).
+        bh_t0 = bool(bh and (bh.get("tier0") or bh.get("tier0_groups")))
+        u_out["is_tier0"] = (
+            u.get("is_krbtgt")
+            or check_is_tier0(u["username"], u["domain"], tier0_lookup)
+            or bh_t0
+        )
         ck = f"{u['domain'].lower()}/{u['username'].lower()}"
+        # Tags on this account = tags of any group it's in + tags set directly
+        # on the account (works even when BloodHound has no record of it).
+        group_tags = tags_for_groups(u_out["groups"], tag_lookup)
+        own_tags   = [t for t in user_tag_map.get(ck, []) if t]
+        seen = {t.lower() for t in group_tags}
+        u_out["tags"]      = group_tags + [t for t in own_tags if t.lower() not in seen]
+        u_out["user_tags"] = own_tags
+        u_out["hash_count"] = len(share_groups.get(u["nt_hash"], ())) or 1
         u_out["comment"] = comment_map.get(ck, "")
         result.append(u_out)
 

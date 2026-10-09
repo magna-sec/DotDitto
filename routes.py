@@ -895,7 +895,8 @@ def paste_tier0():
 def _bloodhound_summary(records: list) -> dict:
     """Counts for the UI status line."""
     disabled = sum(1 for r in records if r.get("enabled") is False)
-    return {"count": len(records), "disabled": disabled}
+    tier0    = sum(1 for r in records if r.get("tier0") or r.get("tier0_groups"))
+    return {"count": len(records), "disabled": disabled, "tier0": tier0}
 
 
 @bp.route("/api/bloodhound", methods=["GET"])
@@ -942,25 +943,39 @@ def clear_bloodhound():
 
 
 # ---------------------------------------------------------------------------
-# Group tags — free-text labels on BloodHound groups ("privileged", "bypasses
-# mfa", …). Tagged from the per-user groups popup; each distinct tag becomes a
-# filter in the user-scope dropdown, scoping the table to members of any group
-# carrying that tag.
+# Tags — free-text labels ("privileged", "bypasses mfa", …) applied either to a
+# BloodHound group (flags every member) or directly to an account (works even
+# for accounts BloodHound never found). Tagged from the per-user groups popup;
+# each distinct tag becomes a filter in the user-scope dropdown.
 # ---------------------------------------------------------------------------
 
-def _distinct_tags(group_tags: dict) -> list:
-    """All distinct tags in use, sorted case-insensitively."""
+def _distinct_tags(*tag_maps: dict) -> list:
+    """All distinct tags across one or more {key: [tags]} maps, sorted ci."""
     seen: dict = {}
-    for tags in (group_tags or {}).values():
-        for t in (tags or []):
-            seen.setdefault(t.lower(), t)
+    for tmap in tag_maps:
+        for tags in (tmap or {}).values():
+            for t in (tags or []):
+                seen.setdefault(t.lower(), t)
     return [seen[k] for k in sorted(seen)]
+
+
+def _normalize_tag_list(raw) -> list | None:
+    """Trim, drop blanks, de-dupe case-insensitively. None if not a list."""
+    if not isinstance(raw, list):
+        return None
+    seen: dict = {}
+    for t in raw:
+        t = str(t).strip()
+        if t:
+            seen.setdefault(t.lower(), t)
+    return list(seen.values())
 
 
 @bp.route("/api/group-tags", methods=["GET"])
 def get_group_tags():
     gt = session.get("group_tags", {})
-    return jsonify({"tags": gt, "all_tags": _distinct_tags(gt)})
+    ut = session.get("user_tags", {})
+    return jsonify({"tags": gt, "user_tags": ut, "all_tags": _distinct_tags(gt, ut)})
 
 
 @bp.route("/api/group-tags", methods=["POST"])
@@ -971,16 +986,9 @@ def set_group_tags():
     if not group:
         return jsonify({"error": "No group provided"}), 400
 
-    raw = data.get("tags", [])
-    if not isinstance(raw, list):
+    tags = _normalize_tag_list(data.get("tags", []))
+    if tags is None:
         return jsonify({"error": "tags must be a list"}), 400
-    # Normalise: trim, drop blanks, de-dupe case-insensitively (first spelling wins)
-    seen: dict = {}
-    for t in raw:
-        t = str(t).strip()
-        if t:
-            seen.setdefault(t.lower(), t)
-    tags = list(seen.values())
 
     gt = session.setdefault("group_tags", {})
     if tags:
@@ -989,7 +997,29 @@ def set_group_tags():
         gt.pop(group, None)
     save_session()
     return jsonify({"success": True, "group": group, "tags": tags,
-                    "all_tags": _distinct_tags(gt)})
+                    "all_tags": _distinct_tags(gt, session.get("user_tags", {}))})
+
+
+@bp.route("/api/user-tags", methods=["POST"])
+def set_user_tags():
+    """Replace the tag list for one account, keyed 'domain/username' (lowercase)."""
+    data = request.get_json(silent=True) or {}
+    key  = (data.get("key") or "").strip().lower()
+    if not key:
+        return jsonify({"error": "No account key provided"}), 400
+
+    tags = _normalize_tag_list(data.get("tags", []))
+    if tags is None:
+        return jsonify({"error": "tags must be a list"}), 400
+
+    ut = session.setdefault("user_tags", {})
+    if tags:
+        ut[key] = tags
+    else:
+        ut.pop(key, None)
+    save_session()
+    return jsonify({"success": True, "key": key, "tags": tags,
+                    "all_tags": _distinct_tags(session.get("group_tags", {}), ut)})
 
 
 @bp.route("/api/comment", methods=["POST"])

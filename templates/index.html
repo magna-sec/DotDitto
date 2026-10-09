@@ -688,6 +688,14 @@
       width: 110px; flex: 0 0 auto;
     }
     .g-tag-input:focus { outline: none; border-color: var(--yellow); border-style: solid; }
+    .account-tag-row {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      padding: 8px 10px; margin-bottom: 10px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      font-size: 13px; font-family: var(--font-mono);
+    }
+    .account-tag-row .g-name::before { content: none; }
+    .group-list li.g-tier0 { background: rgba(248,81,73,.07); }
 
     .badge-krbtgt {
       display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
@@ -1818,7 +1826,10 @@ RETURN n.name</pre>
 WHERE n:User OR n:Computer
 OPTIONAL MATCH (n)-[:MemberOf*1..]->(g:Group)
 RETURN n.samaccountname AS samaccountname, n.name AS name,
-       n.enabled AS enabled, collect(DISTINCT g.name) AS groups</pre>
+       n.enabled AS enabled,
+       (n:Tag_Tier_Zero OR COALESCE(n.system_tags,'') CONTAINS 'admin_tier_0') AS tier0,
+       collect(DISTINCT g.name) AS groups,
+       collect(DISTINCT CASE WHEN (g:Tag_Tier_Zero OR COALESCE(g.system_tags,'') CONTAINS 'admin_tier_0') THEN g.name END) AS tier0_groups</pre>
           <button class="btn sm" onclick="copyBHImportQuery()" style="width:100%;justify-content:center">Copy query</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--border);padding-top:10px;">
@@ -3031,7 +3042,7 @@ async function initSession() {
       setTier0Status(t0.count, `saved session  (${t0.count} users)`);
     }
     if (bh && bh.count > 0) {
-      setBHStatus(bh.count, bh.disabled, `saved session  (${bh.count} accounts)`);
+      setBHStatus(bh.count, bh.disabled, `saved session  (${bh.count} accounts)`, bh.tier0);
     }
     if (info.has_dump) {
       await refresh();  // loadStats → updateDumpStatusFromStats will set the dump status label
@@ -3955,8 +3966,9 @@ function closeShareModal(e) {
 /* ══════════════════════════════════════════════════════════════════════════
    Group membership popup (BloodHound) — opened by clicking a username
 ══════════════════════════════════════════════════════════════════════════ */
-let _groupsModalList = [];   // sorted group names for the open account (index = idx used by tag fns)
-let _groupsModalUser = null;
+let _groupsModalList  = [];   // sorted group names for the open account (index = idx used by tag fns)
+let _groupsModalUser  = null;
+let _groupsModalT0set = null; // Set of lowercased tier-0 group names for the open account
 
 function copyGroupsModal() {
   if (_groupsModalList.length) copyText(_groupsModalList.join('\n'));
@@ -3968,9 +3980,11 @@ function openGroupsModal(src, idx) {
   _groupsModalUser = u;
   _groupsModalList = (Array.isArray(u.groups) ? u.groups.slice() : [])
     .sort((a, b) => a.localeCompare(b));
+  _groupsModalT0set = new Set((u.tier0_groups || []).map(g => g.toLowerCase()));
 
-  document.getElementById('groups-modal-title').textContent =
-    (u.domain ? u.domain + '\\' : '') + u.username;
+  const t0badge = u.is_tier0 ? '<span class="badge-tier0" title="Tier 0 account">T0</span>' : '';
+  document.getElementById('groups-modal-title').innerHTML =
+    esc((u.domain ? u.domain + '\\' : '') + u.username) + t0badge;
 
   const statusBits = [];
   if (u.enabled === false)      statusBits.push('<span class="badge-disabled">disabled</span>');
@@ -3983,33 +3997,55 @@ function openGroupsModal(src, idx) {
   document.getElementById('groups-modal-overlay').classList.remove('hidden');
 }
 
-/* Render the group list with per-group tag chips + an inline "add tag" input.
-   Re-run after any tag change so the popup reflects the saved state. */
+/* Render the account-level tag row + the group list (with per-group tag chips,
+   tier-0 badges, and an inline "add tag" input). Re-run after any tag change. */
 function renderGroupsModalBody() {
   const body = document.getElementById('groups-modal-body');
-  if (!_groupsModalList.length) {
-    body.innerHTML = `<div style="color:var(--text-muted);font-size:12px">No group membership recorded for this account in the BloodHound import.</div>`;
-    return;
-  }
-  const items = _groupsModalList.map((g, i) => {
-    const tags = _groupTagsOf(g);
-    const chips = tags.map((t, ti) =>
-      `<span class="g-tagchip">${esc(t)}<button title="Remove tag" onclick="removeTagFromGroup(${i},${ti})">×</button></span>`
-    ).join('');
-    return `<li>
-      <span class="g-name">${esc(g)}</span>
-      ${chips}
+  const u = _groupsModalUser;
+
+  // Account-level tags — always available, so an account with no groups (or one
+  // BloodHound never found) can still be tagged directly.
+  const userTags = u ? _userTagsOf(u) : [];
+  const userChips = userTags.map((t, ti) =>
+    `<span class="g-tagchip">${esc(t)}<button title="Remove tag" onclick="removeTagFromUser(${ti})">×</button></span>`
+  ).join('');
+  const accountSection = `
+    <div class="account-tag-row">
+      <span class="g-name" style="flex:0 0 auto">This account</span>
+      ${userChips}
       <input class="g-tag-input" list="all-tags-datalist" placeholder="+ tag"
-             title="Tag this group (e.g. privileged, bypasses mfa) — Enter to add"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();addTagToGroup(${i}, this.value, this);}">
-    </li>`;
-  }).join('');
+             title="Tag this account directly (e.g. privileged) — Enter to add"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addTagToUser(this.value, this);}">
+    </div>`;
+
+  let groupsHtml;
+  if (!_groupsModalList.length) {
+    groupsHtml = `<div style="color:var(--text-muted);font-size:12px;padding-top:4px">No group membership recorded for this account in the BloodHound import.</div>`;
+  } else {
+    const items = _groupsModalList.map((g, i) => {
+      const isT0 = _groupsModalT0set && _groupsModalT0set.has(g.toLowerCase());
+      const t0 = isT0 ? '<span class="badge-tier0" title="Tier 0 group">T0</span>' : '';
+      const chips = _groupTagsOf(g).map((t, ti) =>
+        `<span class="g-tagchip">${esc(t)}<button title="Remove tag" onclick="removeTagFromGroup(${i},${ti})">×</button></span>`
+      ).join('');
+      return `<li${isT0 ? ' class="g-tier0"' : ''}>
+        <span class="g-name">${esc(g)}${t0}</span>
+        ${chips}
+        <input class="g-tag-input" list="all-tags-datalist" placeholder="+ tag"
+               title="Tag this group (e.g. privileged, bypasses mfa) — Enter to add"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();addTagToGroup(${i}, this.value, this);}">
+      </li>`;
+    }).join('');
+    groupsHtml = `<ul class="group-list">${items}</ul>`;
+  }
+
   body.innerHTML =
     `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-       <span style="font-size:11px;color:var(--text-muted)">Add a tag to a group (e.g. <b>privileged</b>), then filter by it in the user-scope dropdown.</span>
-       <button class="btn sm client-hide" style="margin-left:auto" onclick="copyGroupsModal()">Copy groups</button>
+       <span style="font-size:11px;color:var(--text-muted)">Tag an account or a group (e.g. <b>privileged</b>), then filter by that tag in the user-scope dropdown.</span>
+       ${_groupsModalList.length ? '<button class="btn sm client-hide" style="margin-left:auto" onclick="copyGroupsModal()">Copy groups</button>' : ''}
      </div>
-     <ul class="group-list">${items}</ul>`;
+     ${accountSection}
+     ${groupsHtml}`;
 }
 
 function closeGroupsModal(e) {
@@ -4626,8 +4662,8 @@ async function loadFileBloodhound(file) {
   fd.append('file', file);
   try {
     const res = await api('POST', '/api/bloodhound/upload', fd);
-    setBHStatus(res.count, res.disabled, `${file.name}  (${res.count} accounts)`);
-    toast(`Loaded ${res.count} BloodHound accounts (${res.disabled} disabled)`, 'success');
+    setBHStatus(res.count, res.disabled, `${file.name}  (${res.count} accounts)`, res.tier0);
+    toast(`Loaded ${res.count} BloodHound accounts (${res.disabled} disabled, ${res.tier0} tier 0)`, "success");
     if (state.hasDump) await refresh();
   } catch (err) {
     toast(`BloodHound error: ${err.message}`, 'error', 6000);
@@ -4637,8 +4673,8 @@ async function loadFileBloodhound(file) {
 async function loadPasteBloodhound(text) {
   try {
     const res = await api('POST', '/api/bloodhound/paste', { text });
-    setBHStatus(res.count, res.disabled, `Pasted  (${res.count} accounts)`);
-    toast(`Loaded ${res.count} BloodHound accounts (${res.disabled} disabled)`, 'success');
+    setBHStatus(res.count, res.disabled, `Pasted  (${res.count} accounts)`, res.tier0);
+    toast(`Loaded ${res.count} BloodHound accounts (${res.disabled} disabled, ${res.tier0} tier 0)`, "success");
     if (state.hasDump) await refresh();
   } catch (err) {
     toast(`BloodHound error: ${err.message}`, 'error', 6000);
@@ -4655,7 +4691,7 @@ async function clearBloodhound() {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-function setBHStatus(count, disabled, label) {
+function setBHStatus(count, disabled, label, tier0) {
   const btn      = document.getElementById('btn-bloodhound');
   const countEl  = document.getElementById('bloodhound-panel-count');
   const clearBtn = document.getElementById('btn-bloodhound-clear');
@@ -4663,7 +4699,8 @@ function setBHStatus(count, disabled, label) {
   btn.textContent = on ? `BloodHound (${count}) ▾` : 'Import BloodHound ▾';
   btn.classList.toggle('tier0-loaded', on);
   if (countEl) countEl.textContent = on
-    ? `${label}${disabled ? '  ·  ' + disabled + ' disabled' : ''}` : 'None loaded';
+    ? `${label}${disabled ? '  ·  ' + disabled + ' disabled' : ''}${tier0 ? '  ·  ' + tier0 + ' tier 0' : ''}`
+    : 'None loaded';
   if (clearBtn) clearBtn.disabled = !on;
 }
 
@@ -4672,14 +4709,19 @@ function setBHStatus(count, disabled, label) {
    popup) that become filters in the user-scope dropdown.
 ══════════════════════════════════════════════════════════════════════════ */
 let _groupTags = {};   // { "<exact group name>": ["privileged", ...] }
+let _userTags  = {};   // { "domain/username" (lowercase): [tags] } — accounts tagged directly
 let _allTags   = [];   // distinct tags in use, sorted
 
 function _applyGroupTagsData(d) {
   _groupTags = d.tags || {};
+  _userTags  = d.user_tags || {};
   _allTags   = d.all_tags || [];
   rebuildScopeFilter();
   refreshTagsDatalist();
 }
+
+function _userTagKey(u) { return `${(u.domain||'').toLowerCase()}/${u.username.toLowerCase()}`; }
+function _userTagsOf(u) { return (_userTags[_userTagKey(u)] || []).slice(); }
 
 async function loadGroupTags() {
   try { _applyGroupTagsData(await api('GET', '/api/group-tags')); }
@@ -4747,6 +4789,45 @@ async function removeTagFromGroup(idx, tagIdx) {
   tags.splice(tagIdx, 1);
   try {
     await _saveGroupTags(name, tags);
+    renderGroupsModalBody();
+    if (state.hasDump) await loadUsers();
+  } catch (err) { toast(`Tag error: ${err.message}`, 'error'); }
+}
+
+/* Tags applied directly to the open account (works even when BloodHound has no
+   record of it, so it has no groups to tag). */
+async function _saveUserTags(key, tags) {
+  const res = await api('POST', '/api/user-tags', { key, tags });
+  if (res.tags && res.tags.length) _userTags[key] = res.tags;
+  else delete _userTags[key];
+  _allTags = res.all_tags || [];
+  rebuildScopeFilter();
+  refreshTagsDatalist();
+}
+
+async function addTagToUser(value, inputEl) {
+  const u = _groupsModalUser;
+  const tag = (value || '').trim();
+  if (!u || !tag) return;
+  const key  = _userTagKey(u);
+  const tags = _userTagsOf(u);
+  if (!tags.some(t => t.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+  if (inputEl) inputEl.value = '';
+  try {
+    await _saveUserTags(key, tags);
+    renderGroupsModalBody();
+    if (state.hasDump) await loadUsers();
+  } catch (err) { toast(`Tag error: ${err.message}`, 'error'); }
+}
+
+async function removeTagFromUser(tagIdx) {
+  const u = _groupsModalUser;
+  if (!u) return;
+  const key  = _userTagKey(u);
+  const tags = _userTagsOf(u);
+  tags.splice(tagIdx, 1);
+  try {
+    await _saveUserTags(key, tags);
     renderGroupsModalBody();
     if (state.hasDump) await loadUsers();
   } catch (err) { toast(`Tag error: ${err.message}`, 'error'); }

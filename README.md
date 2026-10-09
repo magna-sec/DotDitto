@@ -23,7 +23,7 @@
   - **All Hashes** — per-user NT (RC4), AES-256, AES-128, and DES Kerberos keys with one-click copy
   - **Analysis** — shared-password clusters (works with no pot file loaded), character-class breakdown, password reuse stats, complexity buckets, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
 - **Tier-0 user tracking** — load a list of privileged accounts (file, paste, or BloodHound Cypher query); matching rows are flagged with a `T0` badge and a red left border; filter the table to tier-0 accounts only
-- **BloodHound import** — load a neo4j CSV/JSON export (users/computers with groups + enabled status); disabled accounts are badged and dimmed, clicking a username shows its group membership, the search bar gains a group-member lookup, and groups can be tagged (e.g. `privileged`) to filter the table to their members (see [BloodHound Import](#bloodhound-import))
+- **BloodHound import** — load a neo4j CSV/JSON export (users/computers with groups, enabled status, and tier-0 tagging); disabled accounts are badged and dimmed, tier-0 accounts/groups are flagged `T0`, clicking a username shows its group membership, the search bar gains a group-member lookup, and accounts or groups can be tagged (e.g. `privileged`) to filter the table (see [BloodHound Import](#bloodhound-import))
 - **Per-row notes** — click any Notes cell to attach a free-text annotation to an account (e.g. `SNOW Admin`, `Has 2 VDIs`); notes are saved in the session
 - **Client Mode** — blurs sensitive data for client-facing screen shares; independently toggle hiding of passwords/hashes and/or usernames
 - **Themes** — Dark (default), Professional (clean light), Terminal (green phosphor), Synthwave (retro neon), Classic (Windows 95), Contrast (neon pink/cyan)
@@ -264,7 +264,10 @@ MATCH (n)
 WHERE n:User OR n:Computer
 OPTIONAL MATCH (n)-[:MemberOf*1..]->(g:Group)
 RETURN n.samaccountname AS samaccountname, n.name AS name,
-       n.enabled AS enabled, collect(DISTINCT g.name) AS groups
+       n.enabled AS enabled,
+       (n:Tag_Tier_Zero OR COALESCE(n.system_tags,'') CONTAINS 'admin_tier_0') AS tier0,
+       collect(DISTINCT g.name) AS groups,
+       collect(DISTINCT CASE WHEN (g:Tag_Tier_Zero OR COALESCE(g.system_tags,'') CONTAINS 'admin_tier_0') THEN g.name END) AS tier0_groups
 ```
 
 Run it in the **neo4j Browser**, use its **Export CSV** *or* **Export JSON**
@@ -278,6 +281,10 @@ Once loaded:
 - accounts that are **disabled** in AD get a grey `disabled` badge and a dimmed
   row (both the Overview and All Hashes tables). Accounts absent from the import
   are left unmarked — unknown, not assumed enabled
+- **tier-0** accounts get the red `T0` badge and count toward the **Tier 0 only**
+  filter, exactly like the manually-loaded tier-0 list. An account is tier-0 when
+  BloodHound tags the node itself tier-zero *or* it's a member of a tier-zero
+  group (e.g. Domain Admins); tier-zero groups are badged `T0` in the popup
 - **clicking a username** opens a popup listing that account's groups, with a
   **Copy groups** button
 - the **search field** dropdown gains **Group member** — search for a group name
@@ -288,21 +295,25 @@ Once loaded:
 Use **Clear** in the panel to drop the imported data. It's saved with the
 session and restored on reload.
 
-### Group tags
+### Tags
 
-Inside the group popup, each group has a **+ tag** box. Type any label —
-`privileged`, `bypasses mfa`, `can reset passwords`, whatever is useful for the
-engagement — and press Enter to tag that group; the `×` on a tag chip removes it.
-Tags are free-text and a group can carry several; an autocomplete offers tags
-already in use so spellings stay consistent.
+Click a username to open the group popup. At the top is a **This account** row,
+and each group below has its own **+ tag** box. Type any label — `privileged`,
+`bypasses mfa`, `can reset passwords`, whatever is useful for the engagement —
+and press Enter to tag either the **account itself** or a **group**; the `×` on a
+tag chip removes it. Tags are free-text, a group or account can carry several, and
+an autocomplete offers tags already in use so spellings stay consistent.
+
+Tagging the **account** works even for accounts BloodHound never found (so they
+have no groups) — useful for flagging something you learned out-of-band.
 
 Every distinct tag then appears in the **user-scope dropdown** (alongside *All
 users* and *Tier 0 only*) as **Tag: &lt;name&gt;**. Selecting it scopes the table
-to every account that is a member of *any* group carrying that tag — e.g. tag the
-handful of groups that lead to Domain Admin as `privileged`, then filter to
-everyone who can reach DA. Tagged accounts also show the tag as a badge in the
-Username column, and tags export in the **Group Tags** CSV column. Tags are saved
-with the session.
+to every account that carries that tag directly *or* is a member of any group
+carrying it — e.g. tag the handful of groups that lead to Domain Admin as
+`privileged`, then filter to everyone who can reach DA. Tagged accounts show the
+tag as a badge in the Username column, and tags export in the **Group Tags** CSV
+column. Tags are saved with the session.
 
 ---
 
