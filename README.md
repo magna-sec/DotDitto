@@ -23,6 +23,7 @@
   - **All Hashes** — per-user NT (RC4), AES-256, AES-128, and DES Kerberos keys with one-click copy
   - **Analysis** — shared-password clusters (works with no pot file loaded), character-class breakdown, password reuse stats, complexity buckets, length distribution, top hashcat mask patterns, top word tokens, and top prefixes
 - **Tier-0 user tracking** — load a list of privileged accounts (file, paste, or BloodHound Cypher query); matching rows are flagged with a `T0` badge and a red left border; filter the table to tier-0 accounts only
+- **BloodHound import** — load a neo4j CSV export (users/computers with groups + enabled status); disabled accounts are badged and dimmed, clicking a username shows its group membership, and the search bar gains a group-member lookup (see [BloodHound Import](#bloodhound-import))
 - **Per-row notes** — click any Notes cell to attach a free-text annotation to an account (e.g. `SNOW Admin`, `Has 2 VDIs`); notes are saved in the session
 - **Client Mode** — blurs sensitive data for client-facing screen shares; independently toggle hiding of passwords/hashes and/or usernames
 - **Themes** — Dark (default), Professional (clean light), Terminal (green phosphor), Synthwave (retro neon), Classic (Windows 95), Contrast (neon pink/cyan)
@@ -249,6 +250,43 @@ these load as `bob@corp.local`:
 Blank lines and `#` comments are ignored, and duplicates are collapsed.
 
 Once loaded, matching accounts are flagged with a red `T0` badge in the Username column. Use the **Tier 0 only** filter in the toolbar to scope the table to privileged accounts.
+
+---
+
+## BloodHound Import
+
+Click **Import BloodHound** in the header to enrich the dump with group
+membership and account status pulled from BloodHound/neo4j. The panel carries a
+ready-made Cypher query:
+
+```cypher
+MATCH (n)
+WHERE n:User OR n:Computer
+OPTIONAL MATCH (n)-[:MemberOf*1..]->(g:Group)
+RETURN n.samaccountname AS samaccountname, n.name AS name,
+       n.enabled AS enabled, collect(DISTINCT g.name) AS groups
+```
+
+Run it in the **neo4j Browser**, use its **Export CSV** *or* **Export JSON**
+button, and load the file back here (upload or paste) — the format is detected
+automatically. Fields are matched by name (`samaccountname`, `name`, `enabled`,
+`groups`), so column/key order doesn't matter. Accounts are matched to the dump
+by SAM name + domain — the same FQDN/NetBIOS-tolerant matching used for tier-0.
+
+Once loaded:
+
+- accounts that are **disabled** in AD get a grey `disabled` badge and a dimmed
+  row (both the Overview and All Hashes tables). Accounts absent from the import
+  are left unmarked — unknown, not assumed enabled
+- **clicking a username** opens a popup listing that account's groups, with a
+  **Copy groups** button
+- the **search field** dropdown gains **Group member** — search for a group name
+  to list every member of it. Groups are searched *only* when this field is
+  selected; the default *All fields* search never matches on group membership
+- **CSV export** gains **AD Enabled** and **Groups** columns
+
+Use **Clear** in the panel to drop the imported data. It's saved with the
+session and restored on reload.
 
 ---
 

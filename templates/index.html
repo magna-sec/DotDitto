@@ -293,13 +293,15 @@
 
     /* ── History detail modal ────────────────────────────────────────── */
     #hist-modal-overlay,
-    #share-modal-overlay {
+    #share-modal-overlay,
+    #groups-modal-overlay {
       position: fixed; inset: 0; z-index: 2000;
       background: rgba(0,0,0,.7);
       display: flex; align-items: center; justify-content: center;
     }
     #hist-modal-overlay.hidden,
-    #share-modal-overlay.hidden { display: none; }
+    #share-modal-overlay.hidden,
+    #groups-modal-overlay.hidden { display: none; }
 
     .hist-modal {
       background: var(--surface); border: 1px solid var(--border2);
@@ -638,6 +640,31 @@
       vertical-align: middle; white-space: nowrap; letter-spacing: .04em;
     }
     tr.row-tier0 > td:first-child { border-left: 2px solid rgba(248,81,73,.5); }
+
+    /* ── Disabled-account badge (from BloodHound import) ─────────────────── */
+    .badge-disabled {
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+      background: var(--surface3); color: var(--text-muted);
+      border: 1px solid var(--border2); margin-left: 6px;
+      vertical-align: middle; white-space: nowrap; letter-spacing: .04em; text-transform: uppercase;
+    }
+    tr.row-disabled > td { opacity: .62; }
+    tr.row-disabled:hover > td { opacity: 1; }
+    /* Username is a click target when BloodHound group data is loaded */
+    .username-text.has-groups { cursor: pointer; border-bottom: 1px dotted var(--border2); }
+    .username-text.has-groups:hover { color: var(--blue); border-bottom-color: var(--blue); }
+    .group-list { list-style: none; margin: 0; padding: 0; }
+    .group-list li {
+      display: flex; align-items: baseline; gap: 9px;
+      font-size: 13px; font-family: var(--font-mono); color: var(--text);
+      padding: 6px 4px; border-bottom: 1px solid var(--border);
+      word-break: break-all;
+    }
+    .group-list li:last-child { border-bottom: none; }
+    .group-list li::before {
+      content: "•"; color: var(--blue); flex: 0 0 auto; font-size: 14px; line-height: 1;
+    }
+
     .badge-krbtgt {
       display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
       background: var(--purple-dim); color: var(--purple);
@@ -1644,6 +1671,20 @@
   </div>
 </div>
 
+<!-- Groups modal (BloodHound group membership for one account) -->
+<div id="groups-modal-overlay" class="hidden" onclick="closeGroupsModal(event)">
+  <div class="hist-modal" onclick="event.stopPropagation()">
+    <div class="hist-modal-hdr">
+      <div>
+        <div class="hist-modal-title" id="groups-modal-title">Groups</div>
+        <div class="hist-modal-sub"  id="groups-modal-sub"></div>
+      </div>
+      <button class="hist-modal-close" onclick="closeGroupsModal()" title="Close">✕</button>
+    </div>
+    <div class="hist-modal-body" id="groups-modal-body"></div>
+  </div>
+</div>
+
 <!-- ─── Comment edit popover ─────────────────────────────────────────────── -->
 <div id="comment-popover" class="comment-popover hidden">
   <div class="comment-popover-hdr">
@@ -1731,6 +1772,37 @@ WHERE (n:User OR n:AZUser)
   AND ((n:Tag_Tier_Zero) OR COALESCE(n.system_tags, '') CONTAINS 'admin_tier_0')
 RETURN n.name</pre>
           <button class="btn sm" onclick="copyTier0BHQuery()" style="width:100%;justify-content:center">Copy query</button>
+        </div>
+      </div>
+    </div>
+    <div style="position:relative">
+      <button class="btn sm" id="btn-bloodhound" onclick="toggleBHPanel(event)" title="Import BloodHound group membership &amp; enabled status">Import BloodHound ▾</button>
+      <div id="bloodhound-panel" class="domain-panel hidden" style="min-width:340px">
+        <div class="domain-panel-hdr">
+          <span class="domain-panel-title">Import BloodHound</span>
+          <span id="bloodhound-panel-count" style="font-size:12px;color:var(--text-muted);">None loaded</span>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
+          Run this query in the <b>neo4j Browser</b>, then <b>Export CSV</b> (or
+          <b>JSON</b>) and load the file here. Matches users &amp; computers by SAM
+          name + domain to mark disabled accounts and show group membership.
+        </p>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">neo4j / BloodHound Query</div>
+          <pre id="bh-import-query-pre" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 9px;font-size:10px;font-family:var(--font-mono);color:var(--blue);margin:0 0 6px;white-space:pre-wrap;word-break:break-all;line-height:1.5;user-select:all">MATCH (n)
+WHERE n:User OR n:Computer
+OPTIONAL MATCH (n)-[:MemberOf*1..]->(g:Group)
+RETURN n.samaccountname AS samaccountname, n.name AS name,
+       n.enabled AS enabled, collect(DISTINCT g.name) AS groups</pre>
+          <button class="btn sm" onclick="copyBHImportQuery()" style="width:100%;justify-content:center">Copy query</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--border);padding-top:10px;">
+          <label class="btn sm" style="cursor:pointer;justify-content:center">
+            Upload CSV / JSON
+            <input type="file" id="bloodhound-file-input" accept=".csv,.json,.txt">
+          </label>
+          <button class="btn sm" onclick="closeBHPanel();openModal('bloodhound')">Paste CSV / JSON</button>
+          <button class="btn sm danger" id="btn-bloodhound-clear" onclick="clearBloodhound()" disabled>Clear</button>
         </div>
       </div>
     </div>
@@ -1935,6 +2007,7 @@ RETURN n.name</pre>
           <option value="domain">Domain</option>
           <option value="hash">Hash</option>
           <option value="password">Password</option>
+          <option value="group">Group member</option>
         </select>
         <input type="text" class="search-input" id="search-input"
                placeholder="Search all fields…">
@@ -2386,12 +2459,14 @@ function openModal(mode) {
     pot:   'Paste hashcat pot file contents',
     tier0: 'Paste tier-0 user list',
     known: 'Paste known passwords',
+    bloodhound: 'Paste BloodHound neo4j CSV or JSON',
   };
   const placeholders = {
     dump:  'DOMAIN\\username:RID:LMHash:NTHash:::\n...',
     pot:   'NTLMHASH:plaintext\n$NT$NTLMHASH:plaintext\n...',
     tier0: 'bob@corp.local\nalice@corp.local\nadmin@corp.onmicrosoft.com\n...',
     known: 'Summer2024!\nWelcome123\nCompanyName1\n...',
+    bloodhound: 'CSV:  samaccountname,name,enabled,groups\n      "jdoe","JDOE@CORP.LOCAL",true,"[""DOMAIN ADMINS@CORP.LOCAL""]"\n\nJSON: [{"samaccountname":"jdoe","name":"JDOE@CORP.LOCAL","enabled":true,"groups":["DOMAIN ADMINS@CORP.LOCAL"]}]',
   };
   document.getElementById('modal-title').textContent = titles[mode] || 'Paste text';
   document.getElementById('modal-textarea').value = '';
@@ -2454,6 +2529,8 @@ async function submitModal() {
     await loadPasteDump(text, source);
   } else if (_modalMode === 'tier0') {
     await loadPasteTier0(text);
+  } else if (_modalMode === 'bloodhound') {
+    await loadPasteBloodhound(text);
   } else if (_modalMode === 'known') {
     await loadPasteKnown(text);
   } else {
@@ -2789,6 +2866,7 @@ const _searchFieldPlaceholders = {
   domain: 'Search domain…',
   hash: 'Search hash…',
   password: 'Search password…',
+  group: 'Search group — lists its members…',
 };
 
 function searchFieldChanged() {
@@ -2901,9 +2979,10 @@ async function loadUsers() {
 
 async function initSession() {
   try {
-    const [info, t0] = await Promise.all([
+    const [info, t0, bh] = await Promise.all([
       api('GET', '/api/session'),
       api('GET', '/api/tier0'),
+      api('GET', '/api/bloodhound'),
     ]);
     state.hasDump  = info.has_dump;
     state.hasPot   = info.has_pot;
@@ -2919,6 +2998,9 @@ async function initSession() {
     }
     if (t0.count > 0) {
       setTier0Status(t0.count, `saved session  (${t0.count} users)`);
+    }
+    if (bh && bh.count > 0) {
+      setBHStatus(bh.count, bh.disabled, `saved session  (${bh.count} accounts)`);
     }
     if (info.has_dump) {
       await refresh();  // loadStats → updateDumpStatusFromStats will set the dump status label
@@ -3448,19 +3530,20 @@ async function loadHashesTab() {
 }
 
 function renderHashesTable(users) {
+  _hashPageUsers = users;
   const tbody = document.getElementById('hash-table-body');
   if (!users.length) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">No matching entries</td></tr>`;
     updateHashSortArrows();
     return;
   }
-  tbody.innerHTML = users.map(u => {
+  tbody.innerHTML = users.map((u, i) => {
     const srcLabel   = u.dump_source || '—';
     const tier0Badge = u.is_tier0 ? '<span class="badge-tier0" title="Tier 0 user">T0</span>' : '';
     const krbtgtBadge = u.is_krbtgt ? '<span class="badge-krbtgt" title="KDC service account — never cracks">krbtgt</span>' : '';
-    const rowClass = [u.is_machine ? 'row-machine' : '', u.is_tier0 ? 'row-tier0' : ''].filter(Boolean).join(' ');
+    const rowClass = [u.is_machine ? 'row-machine' : '', u.is_tier0 ? 'row-tier0' : '', u.enabled === false ? 'row-disabled' : ''].filter(Boolean).join(' ');
     return `<tr class="${rowClass}">
-      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
+      <td class="mono">${usernameCellInner(u, i, 'hash')}${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td>${hashCol(u.nt_hash)}${shareBadge(u)}</td>
       <td>${hashCol(u.has_lm ? u.lm_hash : '')}</td>
@@ -3520,7 +3603,22 @@ function shareBadge(u) {
 }
 
 /* ── Current page users (for popup lookup) ───────────────────────── */
-let _pageUsers = [];
+let _pageUsers = [];        // Overview tab
+let _hashPageUsers = [];    // All Hashes tab
+
+/* Username cell content: name + (disabled) badge, clickable when BloodHound
+   group data is loaded for the account. `src` selects the page-user cache the
+   groups modal reads from. */
+function usernameCellInner(u, idx, src) {
+  const hasGroups = Array.isArray(u.groups) && u.groups.length > 0;
+  const cls   = 'username-text' + (hasGroups ? ' has-groups' : '');
+  const click = hasGroups ? ` onclick="event.stopPropagation();openGroupsModal('${src}',${idx})"` : '';
+  const title = hasGroups ? ` title="${u.groups.length} group(s) — click to view"` : '';
+  const nameSpan = `<span class="${cls}"${click}${title}>${esc(u.username)}</span>`;
+  const disabled = u.enabled === false
+    ? '<span class="badge-disabled" title="Account disabled in AD (per BloodHound import)">disabled</span>' : '';
+  return nameSpan + disabled;
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    Main table renderer
@@ -3607,6 +3705,7 @@ function renderTable(users) {
     const rowClass = [
       u.is_machine ? 'row-machine' : '',
       u.is_tier0 ? 'row-tier0' : '',
+      u.enabled === false ? 'row-disabled' : '',
     ].filter(Boolean).join(' ');
 
     const srcLabel = u.dump_source || '—';
@@ -3616,7 +3715,7 @@ function renderTable(users) {
       ? `<td style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="Added ${esc(new Date(u.cracked_at).toLocaleString())}">${rel}</td>`
       : '<td style="text-align:center;color:var(--border2);font-size:12px">—</td>';
     rows.push(`<tr class="${rowClass}">
-      <td class="mono"><span class="username-text">${esc(u.username)}</span>${tier0Badge}${krbtgtBadge}</td>
+      <td class="mono">${usernameCellInner(u, i, 'main')}${tier0Badge}${krbtgtBadge}</td>
       <td class="mono" style="color:var(--text-muted)">${esc(u.domain) || '—'}</td>
       <td style="color:var(--text-muted)">${u.rid}</td>
       <td>${hashCell(u.nt_hash, shareBadge(u))}</td>
@@ -3819,11 +3918,59 @@ function closeShareModal(e) {
   document.getElementById('share-modal-overlay').classList.add('hidden');
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Group membership popup (BloodHound) — opened by clicking a username
+══════════════════════════════════════════════════════════════════════════ */
+let _groupsModalGroups = [];
+function copyGroupsModal() {
+  if (_groupsModalGroups.length) copyText(_groupsModalGroups.join('\n'));
+}
+
+function openGroupsModal(src, idx) {
+  const u = (src === 'hash' ? _hashPageUsers : _pageUsers)[idx];
+  if (!u) return;
+  const groups = Array.isArray(u.groups) ? u.groups : [];
+  _groupsModalGroups = groups;
+
+  document.getElementById('groups-modal-title').textContent =
+    (u.domain ? u.domain + '\\' : '') + u.username;
+
+  const statusBits = [];
+  if (u.enabled === false)      statusBits.push('<span class="badge-disabled">disabled</span>');
+  else if (u.enabled === true)  statusBits.push('<span style="color:var(--green)">enabled</span>');
+  statusBits.push(`${groups.length} group${groups.length === 1 ? '' : 's'}`);
+  document.getElementById('groups-modal-sub').innerHTML =
+    `RID: ${esc(u.rid)}  ·  ` + statusBits.join('  ·  ');
+
+  const body = document.getElementById('groups-modal-body');
+  if (groups.length) {
+    const items = groups
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .map(g => `<li>${esc(g)}</li>`)
+      .join('');
+    body.innerHTML =
+      `<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+         <button class="btn sm client-hide" onclick="copyGroupsModal()">Copy groups</button>
+       </div>
+       <ul class="group-list">${items}</ul>`;
+  } else {
+    body.innerHTML = `<div style="color:var(--text-muted);font-size:12px">No group membership recorded for this account in the BloodHound import.</div>`;
+  }
+  document.getElementById('groups-modal-overlay').classList.remove('hidden');
+}
+
+function closeGroupsModal(e) {
+  if (e && e.target !== document.getElementById('groups-modal-overlay')) return;
+  document.getElementById('groups-modal-overlay').classList.add('hidden');
+}
+
 /* Close on Escape */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeHistoryModal();
     closeShareModal();
+    closeGroupsModal();
     closeModal();
     closeCommentPopover();
   }
@@ -4391,6 +4538,81 @@ async function clearTier0() {
 function copyTier0BHQuery() {
   const q = document.getElementById('bh-query-pre').textContent;
   copyText(q);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BloodHound import (group membership + enabled status)
+══════════════════════════════════════════════════════════════════════════ */
+document.getElementById('bloodhound-file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadFileBloodhound(e.target.files[0]);
+  e.target.value = '';
+  closeBHPanel();
+});
+
+function toggleBHPanel(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('bloodhound-panel').classList.toggle('hidden');
+}
+function closeBHPanel() {
+  document.getElementById('bloodhound-panel').classList.add('hidden');
+}
+document.addEventListener('click', e => {
+  const panel = document.getElementById('bloodhound-panel');
+  const btn   = document.getElementById('btn-bloodhound');
+  if (panel && !panel.classList.contains('hidden') &&
+      !panel.contains(e.target) && e.target !== btn) {
+    panel.classList.add('hidden');
+  }
+});
+
+function copyBHImportQuery() {
+  copyText(document.getElementById('bh-import-query-pre').textContent);
+}
+
+async function loadFileBloodhound(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await api('POST', '/api/bloodhound/upload', fd);
+    setBHStatus(res.count, res.disabled, `${file.name}  (${res.count} accounts)`);
+    toast(`Loaded ${res.count} BloodHound accounts (${res.disabled} disabled)`, 'success');
+    if (state.hasDump) await refresh();
+  } catch (err) {
+    toast(`BloodHound error: ${err.message}`, 'error', 6000);
+  }
+}
+
+async function loadPasteBloodhound(text) {
+  try {
+    const res = await api('POST', '/api/bloodhound/paste', { text });
+    setBHStatus(res.count, res.disabled, `Pasted  (${res.count} accounts)`);
+    toast(`Loaded ${res.count} BloodHound accounts (${res.disabled} disabled)`, 'success');
+    if (state.hasDump) await refresh();
+  } catch (err) {
+    toast(`BloodHound error: ${err.message}`, 'error', 6000);
+  }
+}
+
+async function clearBloodhound() {
+  try {
+    await api('DELETE', '/api/bloodhound');
+    setBHStatus(0, 0, '');
+    closeBHPanel();
+    if (state.hasDump) await refresh();
+    toast('BloodHound data cleared', 'info');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function setBHStatus(count, disabled, label) {
+  const btn      = document.getElementById('btn-bloodhound');
+  const countEl  = document.getElementById('bloodhound-panel-count');
+  const clearBtn = document.getElementById('btn-bloodhound-clear');
+  const on = count > 0;
+  btn.textContent = on ? `BloodHound (${count}) ▾` : 'Import BloodHound ▾';
+  btn.classList.toggle('tier0-loaded', on);
+  if (countEl) countEl.textContent = on
+    ? `${label}${disabled ? '  ·  ' + disabled + ' disabled' : ''}` : 'None loaded';
+  if (clearBtn) clearBtn.disabled = !on;
 }
 
 function setTier0Status(count, label) {

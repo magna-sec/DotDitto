@@ -46,6 +46,7 @@ session: dict = {
     "lm_halves": {},      # 16-hex LM half -> uppercase plaintext half (hashcat -m 3000)
     "tier0_users": [],    # list of lowercase "user@domain" strings
     "user_comments": {},  # keyed by "domain/username" (lowercase)
+    "bloodhound": [],     # BloodHound records: {samaccountname, domain, enabled, groups}
 }
 
 
@@ -131,6 +132,7 @@ def load_session_file() -> None:
             # Ensure fields added after initial save exist on every user object
             session.setdefault("tier0_users", [])
             session.setdefault("user_comments", {})
+            session.setdefault("bloodhound", [])
             session.setdefault("pot_added", {})
             session.setdefault("known_passwords", {})
             session.setdefault("lm_halves", {})
@@ -167,6 +169,7 @@ def clear_session() -> None:
             "lm_halves": {},
             "tier0_users": [],
             "user_comments": {},
+            "bloodhound": [],
         }
     )
     save_session()
@@ -182,6 +185,7 @@ def replace_session(data: dict) -> None:
     session.setdefault("lm_halves", {})
     session.setdefault("tier0_users", [])
     session.setdefault("user_comments", {})
+    session.setdefault("bloodhound", [])
     session.setdefault(
         "metadata",
         {"created": None, "updated": None, "dump_sources": [], "pot_sources": [],
@@ -410,6 +414,49 @@ def check_is_tier0(username: str, domain: str, tier0_lookup: set) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# BloodHound enrichment (group membership + enabled status)
+# ---------------------------------------------------------------------------
+
+def _build_bloodhound_lookup(records: list) -> dict:
+    """Index BloodHound records by account key for fast per-user lookup.
+
+    Mirrors the tier-0 keying so the same NTDS account matches regardless of
+    whether BloodHound recorded the FQDN or the NetBIOS domain: each record is
+    filed under ``sam@fqdn``, ``sam@netbios`` and bare ``sam`` (all lowercase).
+    """
+    lookup: dict = {}
+    for rec in records or []:
+        sam = (rec.get("samaccountname") or "").lower().strip()
+        if not sam:
+            continue
+        dom = (rec.get("domain") or "").lower().strip()
+        keys = [sam]
+        if dom:
+            keys.append(f"{sam}@{dom}")
+            first = dom.split(".")[0]
+            if first != dom:
+                keys.append(f"{sam}@{first}")
+        for k in keys:
+            # First record wins; a later bare-sam collision across domains won't
+            # clobber a more specific sam@domain match.
+            lookup.setdefault(k, rec)
+    return lookup
+
+
+def bloodhound_record(username: str, domain: str, lookup: dict) -> dict | None:
+    """Return the BloodHound record for an NTDS account, most specific first."""
+    if not lookup:
+        return None
+    u = username.lower()
+    d = domain.lower()
+    for key in (f"{u}@{d}", f"{u}@{d.split('.')[0]}", u):
+        rec = lookup.get(key)
+        if rec is not None:
+            return rec
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Filtering / sorting
 # ---------------------------------------------------------------------------
 
@@ -430,6 +477,7 @@ def get_filtered_users(
 ) -> list:
     all_users = session["users"]
     tier0_lookup  = _build_tier0_lookup(session.get("tier0_users", []))
+    bh_lookup     = _build_bloodhound_lookup(session.get("bloodhound", []))
     comment_map   = session.get("user_comments", {})
 
     added_cutoff = (
@@ -523,6 +571,12 @@ def get_filtered_users(
                 match = s_lower in u["nt_hash"]
             elif search_field == "password":
                 match = u["password"] is not None and s_lower in u["password"].lower()
+            elif search_field == "group":
+                # Group membership comes only from imported BloodHound data, and
+                # is searched only when explicitly selected — never in "all".
+                rec = bloodhound_record(u["username"], u["domain"], bh_lookup)
+                groups = rec.get("groups", []) if rec else []
+                match = any(s_lower in g.lower() for g in groups)
             else:
                 match = (
                     s_lower in u["username"].lower()
@@ -561,6 +615,12 @@ def get_filtered_users(
         else:
             u_out["history"] = []
         u_out["is_tier0"] = u.get("is_krbtgt") or check_is_tier0(u["username"], u["domain"], tier0_lookup)
+        # BloodHound enrichment: enabled flag + group membership. enabled is
+        # None when the account wasn't in the import (unknown, not "enabled").
+        bh = bloodhound_record(u["username"], u["domain"], bh_lookup)
+        u_out["enabled"]       = bh.get("enabled") if bh else None
+        u_out["groups"]        = bh.get("groups", []) if bh else []
+        u_out["in_bloodhound"] = bh is not None
         u_out["hash_count"] = len(share_groups.get(u["nt_hash"], ())) or 1
         ck = f"{u['domain'].lower()}/{u['username'].lower()}"
         u_out["comment"] = comment_map.get(ck, "")

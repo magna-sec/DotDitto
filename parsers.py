@@ -2,6 +2,9 @@
 DotDitto — parsers.py
 Parses impacket secretsdump output and hashcat pot files.
 """
+import csv
+import io
+import json
 import re
 
 # ---------------------------------------------------------------------------
@@ -221,6 +224,177 @@ def parse_known_passwords(text: str) -> list:
         if line not in seen:
             seen.add(line)
             out.append(line)
+    return out
+
+
+def _split_group_cell(cell: str) -> list:
+    """Parse a neo4j CSV group cell into a list of group names.
+
+    neo4j Browser exports a list column as a JSON array string —
+    ``["DOMAIN ADMINS@CORP.LOCAL","IT STAFF@CORP.LOCAL"]`` — but hand-made
+    exports or other tools may use a plain ``;`` / ``,`` separated string, so
+    both are handled. Empty cells and literal ``[]`` yield no groups.
+    """
+    cell = (cell or "").strip()
+    if not cell or cell == "[]":
+        return []
+    # Preferred: a JSON array, exactly what neo4j Browser's CSV export writes.
+    if cell.startswith("["):
+        try:
+            arr = json.loads(cell)
+            return [str(g).strip() for g in arr if str(g).strip()]
+        except (ValueError, TypeError):
+            pass
+    # Fallback: a separator-delimited string.
+    sep = ";" if ";" in cell else ","
+    return [clean_list_entry(g) for g in cell.split(sep) if clean_list_entry(g)]
+
+
+def _parse_bool(val: str):
+    """Parse a neo4j boolean cell. Returns True/False, or None when unknown."""
+    v = (val or "").strip().strip(_QUOTE_CHARS + " \t").lower()
+    if v in ("true", "1", "yes", "enabled"):
+        return True
+    if v in ("false", "0", "no", "disabled"):
+        return False
+    return None
+
+
+def _normalize_groups(raw) -> list:
+    """Normalise a groups value (list, JSON-array string, or delimited string)."""
+    if isinstance(raw, (list, tuple)):
+        return [str(g).strip() for g in raw if str(g).strip()]
+    return _split_group_cell(str(raw) if raw is not None else "")
+
+
+def _make_bh_record(sam: str, name: str, enabled_raw, groups_raw) -> dict | None:
+    """Build one BloodHound record from already-separated fields.
+
+    Shared by the CSV and JSON loaders. Recovers the domain from the principal
+    name — users are ``SAM@DNS.DOMAIN``, computers are ``HOST.DNS.DOMAIN`` (no
+    ``@``) — and falls back to the name for the SAM when it's missing. Returns
+    ``None`` when there's no usable account name.
+    """
+    sam  = (sam or "").strip().strip(_QUOTE_CHARS + " \t")
+    name = (name or "").strip().strip(_QUOTE_CHARS + " \t")
+
+    domain = ""
+    if "@" in name:
+        local, domain = name.split("@", 1)
+        if not sam:
+            sam = local
+    elif "." in name:
+        host, domain = name.split(".", 1)
+        if not sam:
+            sam = host  # computer short name; NTDS adds the trailing '$'
+
+    if not sam:
+        return None
+
+    enabled = enabled_raw if isinstance(enabled_raw, bool) else _parse_bool(enabled_raw)
+    return {
+        "samaccountname": sam,
+        "domain": domain,
+        "enabled": enabled,
+        "groups": _normalize_groups(groups_raw),
+    }
+
+
+def parse_bloodhound(text: str) -> list:
+    """Parse a BloodHound export (neo4j CSV *or* JSON) of users/computers.
+
+    Produced by the *Import BloodHound* Cypher query (run in the neo4j Browser
+    and exported with **Export CSV** or **Export JSON**). The format is detected
+    automatically; either way the fields are matched by name, case-insensitively,
+    so column/key order doesn't matter:
+
+        samaccountname , name , enabled , groups
+
+    ``samaccountname`` is the SAM account name (``jdoe`` / ``WS01$``) that pairs
+    with the NTDS username; ``name`` is the BloodHound principal
+    (``JDOE@CORP.LOCAL`` / ``WS01.CORP.LOCAL``) used to recover the domain when a
+    SAM name is missing. ``groups`` is a list (or JSON-array string) of group
+    principals.
+
+    Returns a list of records::
+
+        {"samaccountname": str, "domain": str, "enabled": bool|None,
+         "groups": [str, ...]}
+
+    Rows/objects with no usable account name are skipped.
+    """
+    stripped = text.lstrip("﻿ \t\r\n")
+    if stripped[:1] in ("[", "{"):
+        try:
+            return parse_bloodhound_json(stripped)
+        except ValueError:
+            pass  # not valid JSON after all — fall through and try CSV
+    return parse_bloodhound_csv(text)
+
+
+def parse_bloodhound_json(text: str) -> list:
+    """Parse a neo4j JSON export (an array of row objects, or a {data:[…]} wrapper)."""
+    data = json.loads(text)
+    if isinstance(data, dict):
+        # neo4j/BloodHound exports wrap rows under one of these keys; otherwise
+        # treat the object itself as a single row.
+        for key in ("data", "records", "rows", "results"):
+            if isinstance(data.get(key), list):
+                data = data[key]
+                break
+        else:
+            data = [data]
+    if not isinstance(data, list):
+        return []
+
+    out: list = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        low = {str(k).lower(): v for k, v in row.items()}
+        rec = _make_bh_record(
+            low.get("samaccountname") or low.get("sam") or "",
+            low.get("name") or low.get("principal") or "",
+            low.get("enabled"),
+            low.get("groups") or low.get("memberof") or [],
+        )
+        if rec:
+            out.append(rec)
+    return out
+
+
+def parse_bloodhound_csv(text: str) -> list:
+    """Parse a neo4j CSV export of BloodHound users/computers (see parse_bloodhound)."""
+    reader = csv.reader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        return []
+
+    header = [h.strip().strip(_QUOTE_CHARS + " \t").lower() for h in rows[0]]
+
+    def col(*names):
+        for n in names:
+            if n in header:
+                return header.index(n)
+        return -1
+
+    i_sam    = col("samaccountname", "sam")
+    i_name   = col("name", "principal", "n.name")
+    i_enab   = col("enabled", "n.enabled")
+    i_groups = col("groups", "group", "memberof")
+
+    out: list = []
+    for row in rows[1:]:
+        if not row or not any(c.strip() for c in row):
+            continue
+
+        def cell(idx):
+            return row[idx] if 0 <= idx < len(row) else ""
+
+        rec = _make_bh_record(cell(i_sam), cell(i_name), cell(i_enab),
+                              cell(i_groups))
+        if rec:
+            out.append(rec)
     return out
 
 

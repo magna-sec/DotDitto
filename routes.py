@@ -11,6 +11,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from analysis import build_word_wordlist, run_analysis
 from parsers import (
+    parse_bloodhound,
     parse_known_passwords,
     parse_list_entries,
     parse_lm_halves,
@@ -709,7 +710,7 @@ def export_csv():
     w.writerow(["Username", "Domain", "RID", "LM Hash", "NT Hash", "Password",
                 "Password Origin", "Blank/Disabled", "LM Password", "Cracked At",
                 "Shared Count", "Accounts Sharing Hash", "Machine", "History",
-                "Hist Index", "Source"])
+                "Hist Index", "Source", "AD Enabled", "Groups"])
     for u in users:
         if u.get("is_blank"):
             origin = "Blank/Disabled"
@@ -734,6 +735,8 @@ def export_csv():
                 "Yes" if u["is_history"] else "No",
                 u["hist_index"] if u["hist_index"] >= 0 else "",
                 u.get("dump_source", ""),
+                "" if u.get("enabled") is None else ("Yes" if u.get("enabled") else "No"),
+                "; ".join(u.get("groups", [])),
             ]
         )
     buf.seek(0)
@@ -875,6 +878,64 @@ def paste_tier0():
     session["tier0_users"] = users
     save_session()
     return jsonify({"success": True, "count": len(users)})
+
+
+# ---------------------------------------------------------------------------
+# BloodHound import — group membership + enabled status
+#
+# A neo4j CSV export (from the Import BloodHound Cypher query) maps each account
+# to its groups and whether it's enabled. Matched back to NTDS accounts by SAM
+# name + domain, it lets the table mark disabled accounts and show per-user
+# group membership, and powers the "Group member" search.
+# ---------------------------------------------------------------------------
+
+def _bloodhound_summary(records: list) -> dict:
+    """Counts for the UI status line."""
+    disabled = sum(1 for r in records if r.get("enabled") is False)
+    return {"count": len(records), "disabled": disabled}
+
+
+@bp.route("/api/bloodhound", methods=["GET"])
+def get_bloodhound():
+    records = session.get("bloodhound", [])
+    return jsonify(_bloodhound_summary(records))
+
+
+@bp.route("/api/bloodhound/upload", methods=["POST"])
+def upload_bloodhound():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "No file provided"}), 400
+    text = f.read().decode("utf-8-sig", errors="replace")
+    records = parse_bloodhound(text)
+    if not records:
+        return jsonify({"error": "No accounts found — expected a neo4j CSV or JSON export with "
+                                 "samaccountname / name / enabled / groups columns"}), 400
+    session["bloodhound"] = records
+    save_session()
+    return jsonify({"success": True, **_bloodhound_summary(records)})
+
+
+@bp.route("/api/bloodhound/paste", methods=["POST"])
+def paste_bloodhound():
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    if not text.strip():
+        return jsonify({"error": "No text provided"}), 400
+    records = parse_bloodhound(text)
+    if not records:
+        return jsonify({"error": "No accounts found — expected a neo4j CSV or JSON export with "
+                                 "samaccountname / name / enabled / groups columns"}), 400
+    session["bloodhound"] = records
+    save_session()
+    return jsonify({"success": True, **_bloodhound_summary(records)})
+
+
+@bp.route("/api/bloodhound", methods=["DELETE"])
+def clear_bloodhound():
+    session["bloodhound"] = []
+    save_session()
+    return jsonify({"success": True})
 
 
 @bp.route("/api/comment", methods=["POST"])
